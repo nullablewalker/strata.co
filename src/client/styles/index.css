@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --color-strata-bg: #0f0f0f;
+  --color-strata-surface: #1a1a1a;
+  --color-strata-border: #2a2a2a;
+
+  --color-strata-amber-50: #fdf8ef;
+  --color-strata-amber-100: #f5e6c8;
+  --color-strata-amber-200: #e8c88c;
+  --color-strata-amber-300: #d4a04a;
+  --color-strata-amber-400: #c4872e;
+  --color-strata-amber-500: #a66b1f;
+  --color-strata-amber-600: #8b5518;
+  --color-strata-amber-700: #6e4013;
+
+  --color-strata-green-400: #4a7c59;
+  --color-strata-green-500: #3a6348;
+  --color-strata-green-600: #2d4f39;
+
+  --color-strata-slate-400: #8b9eac;
+  --color-strata-slate-500: #6b7f8d;
+  --color-strata-slate-600: #4f5f6b;
+
+  --color-heat-0: #1a1a1a;
+  --color-heat-1: #fdf8ef;
+  --color-heat-2: #e8c88c;
+  --color-heat-3: #d4a04a;
+  --color-heat-4: #a66b1f;
+  --color-heat-5: #8b3a1f;
+
+  --font-sans: "Inter", "system-ui", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-strata-bg text-white;
+  }
+}
