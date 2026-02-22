@@ -89,38 +89,34 @@ function formatHour(hour: number): string {
   return `${hour}:00`;
 }
 
+// --- Hooks ---
+
+/** Animated count-up with ease-out cubic easing. */
+function useCountUp(target: number, duration = 1200): number {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (target === 0) { setValue(0); return; }
+    const start = performance.now();
+    let raf: number;
+    const step = (now: number) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease-out cubic for smooth deceleration
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.floor(eased * target));
+      if (progress < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return value;
+}
+
 // --- Components ---
-
-/** A single narrative section with spacing and optional divider. */
-function Section({
-  children,
-  showDivider = true,
-}: {
-  children: React.ReactNode;
-  showDivider?: boolean;
-}) {
-  return (
-    <section className="py-12">
-      {children}
-      {showDivider && (
-        <div className="mt-12 border-b border-strata-border" />
-      )}
-    </section>
-  );
-}
-
-/** Highlighted stat value. */
-function Stat({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-3xl font-bold text-strata-amber-300 font-mono">
-      {children}
-    </span>
-  );
-}
 
 /** Highlighted name (artist, track). */
 function Name({ children }: { children: React.ReactNode }) {
-  return <span className="text-strata-amber-300">{children}</span>;
+  return <span className="font-medium text-strata-amber-300">{children}</span>;
 }
 
 /** Highlighted number inline. */
@@ -130,15 +126,38 @@ function Num({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Loading skeleton lines. */
+/** Loading skeleton with glass-card wrappers and shimmer effect. */
 function Skeleton() {
   return (
-    <div className="mx-auto max-w-2xl px-6 py-16 space-y-8">
-      {Array.from({ length: 7 }).map((_, i) => (
-        <div key={i} className="space-y-3">
-          <div className="h-4 w-3/4 animate-pulse rounded bg-strata-border" />
-          <div className="h-4 w-1/2 animate-pulse rounded bg-strata-border" />
-          <div className="h-4 w-2/3 animate-pulse rounded bg-strata-border" />
+    <div className="space-y-6">
+      {/* Header skeleton */}
+      <div>
+        <div className="h-7 w-56 rounded bg-strata-border/50 shimmer" />
+        <div className="mt-2 h-4 w-36 rounded bg-strata-border/30 shimmer" />
+      </div>
+      {/* Opening card skeleton with stat grid */}
+      <div className="glass-card p-6">
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          {[0, 1].map((i) => (
+            <div key={i}>
+              <div className="h-3 w-16 rounded bg-strata-border/40 shimmer" />
+              <div className="mt-2 h-8 w-24 rounded bg-strata-border/50 shimmer" style={{ animationDelay: `${i * 0.15}s` }} />
+            </div>
+          ))}
+        </div>
+        <div className="space-y-3">
+          <div className="h-4 w-3/4 rounded bg-strata-border/40 shimmer" />
+          <div className="h-4 w-2/3 rounded bg-strata-border/30 shimmer" style={{ animationDelay: "0.1s" }} />
+        </div>
+      </div>
+      {/* Generic section skeletons */}
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div key={i} className="glass-card p-6">
+          <div className="h-3 w-32 rounded bg-strata-border/40 shimmer" />
+          <div className="mt-4 space-y-3">
+            <div className="h-4 w-4/5 rounded bg-strata-border/40 shimmer" style={{ animationDelay: `${i * 0.1}s` }} />
+            <div className="h-4 w-2/3 rounded bg-strata-border/30 shimmer" style={{ animationDelay: `${i * 0.1 + 0.1}s` }} />
+          </div>
         </div>
       ))}
     </div>
@@ -159,14 +178,23 @@ export default function Autobiography() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Always call hooks (pass 0 when no data)
+  const animatedTracks = useCountUp(data?.overall.uniqueTracks ?? 0);
+  const animatedArtists = useCountUp(data?.overall.uniqueArtists ?? 0);
+  const animatedHours = useCountUp(data ? Math.floor(data.overall.totalMs / 3_600_000) : 0);
+
   if (loading) return <Skeleton />;
 
   if (error || !data) {
     return (
-      <div className="mx-auto max-w-2xl px-6 py-16 text-center">
-        <p className="text-strata-slate-400">
-          {error ?? "No data available."}
-        </p>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Listening Autobiography</h1>
+          <p className="mt-1 text-sm text-strata-slate-400">あなたの音楽的自伝</p>
+        </div>
+        <div className="glass-card p-12 text-center">
+          <p className="text-strata-slate-400">{error ?? "No data available."}</p>
+        </div>
       </div>
     );
   }
@@ -180,115 +208,146 @@ export default function Autobiography() {
       : "0";
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-8">
-      {/* Page header */}
-      <header className="pb-8 border-b border-strata-border">
-        <h1 className="text-3xl font-bold text-white">
-          Listening Autobiography
-        </h1>
-        <p className="mt-2 text-lg text-strata-slate-400">
-          あなたの音楽的自伝
-        </p>
-      </header>
+    <div className="space-y-6 pb-8">
+      {/* Header — matches Dashboard/Heatmap/Patterns pattern */}
+      <div>
+        <h1 className="text-2xl font-bold text-white">Listening Autobiography</h1>
+        <p className="mt-1 text-sm text-strata-slate-400">あなたの音楽的自伝</p>
+      </div>
 
-      {/* Section 1: Opening */}
-      <Section>
+      {/* Section 1: Opening — glass-card depth-ring, stat grid + date prose */}
+      <div className="glass-card depth-ring p-6">
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div>
+            <p className="text-sm text-strata-slate-400">楽曲</p>
+            <p className="mt-1 font-mono text-3xl font-bold text-strata-amber-300 amber-glow">
+              {animatedTracks.toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-strata-slate-400">アーティスト</p>
+            <p className="mt-1 font-mono text-3xl font-bold text-strata-amber-300 amber-glow">
+              {animatedArtists.toLocaleString()}
+            </p>
+          </div>
+        </div>
         <p className="text-lg text-zinc-300 leading-relaxed">
-          あなたの記録には<Stat>{overall.uniqueTracks.toLocaleString()}</Stat>曲、
-          <Stat>{overall.uniqueArtists.toLocaleString()}</Stat>人のアーティストが刻まれています。
+          あなたの記録には、これだけの音楽が刻まれています。
         </p>
-        <p className="mt-6 text-lg text-zinc-300 leading-relaxed">
+        <p className="mt-4 text-lg text-zinc-300 leading-relaxed">
           最初の記録は<Num>{formatDate(overall.firstPlay)}</Num>。
           最後は<Num>{formatDate(overall.lastPlay)}</Num>。
         </p>
-      </Section>
+      </div>
 
-      {/* Section 2: Time spent */}
-      <Section>
+      {/* Section 2: Time spent — hero stat centered */}
+      <div className="glass-card p-6">
+        <div className="text-center mb-6">
+          <p className="text-sm text-strata-slate-400">音楽と過ごした時間</p>
+          <p className="mt-2 font-mono text-5xl font-bold text-strata-amber-300 amber-glow">
+            {animatedHours.toLocaleString()}
+          </p>
+          <p className="mt-1 text-sm text-strata-slate-500">時間</p>
+        </div>
         <p className="text-lg text-zinc-300 leading-relaxed">
-          あなたは音楽と共に、合計<Stat>{totalHours.toLocaleString()}</Stat>時間を過ごしました。
-        </p>
-        <p className="mt-6 text-lg text-zinc-300 leading-relaxed">
           それは約<Num>{totalDays}</Num>日分。
           <Name>{getMetaphor(totalHours)}</Name>に匹敵する時間です。
         </p>
-      </Section>
+      </div>
 
-      {/* Section 3: Your companion */}
+      {/* Section 3: Your companion — top artists */}
       {topArtists.length > 0 && (
-        <Section>
-          <p className="text-lg text-zinc-300 leading-relaxed">
-            最も長い時間をともに過ごしたのは<Name>{topArtists[0].artistName}</Name>。
+        <div className="glass-card depth-ring p-6">
+          <p className="text-sm text-strata-slate-400 mb-4">最も長い時間をともに過ごしたアーティスト</p>
+          <p className="text-2xl font-bold text-strata-amber-300 amber-glow">
+            {topArtists[0].artistName}
           </p>
-          <p className="mt-6 text-lg text-zinc-300 leading-relaxed">
+          <p className="mt-2 text-lg text-zinc-300 leading-relaxed">
             <Num>{msToHours(topArtists[0].msPlayed).toLocaleString()}</Num>時間、
             <Num>{topArtists[0].playCount.toLocaleString()}</Num>回の再生。
           </p>
           {topArtists.length >= 3 && (
-            <p className="mt-6 text-lg text-zinc-300 leading-relaxed">
+            <p className="mt-4 text-lg text-zinc-300 leading-relaxed">
               二番手の<Name>{topArtists[1].artistName}</Name>、
               三番手の<Name>{topArtists[2].artistName}</Name>が続きます。
             </p>
           )}
           {topArtists.length === 2 && (
-            <p className="mt-6 text-lg text-zinc-300 leading-relaxed">
+            <p className="mt-4 text-lg text-zinc-300 leading-relaxed">
               二番手に<Name>{topArtists[1].artistName}</Name>が続きます。
             </p>
           )}
-        </Section>
+        </div>
       )}
 
-      {/* Section 4: Your anthem */}
+      {/* Section 4: Your anthem — top track */}
       {topTracks.length > 0 && (
-        <Section>
+        <div className="glass-card p-6">
+          <p className="text-sm text-strata-slate-400 mb-4">最も繰り返し聴いた曲</p>
           <p className="text-lg text-zinc-300 leading-relaxed">
-            最も繰り返し聴いた曲は
-            <Name>{topTracks[0].trackName}</Name> by <Name>{topTracks[0].artistName}</Name>。
+            <Name>{topTracks[0].trackName}</Name>
+            <span className="text-strata-slate-500"> by </span>
+            <Name>{topTracks[0].artistName}</Name>
           </p>
-          <p className="mt-6 text-lg text-zinc-300 leading-relaxed">
-            <Num>{topTracks[0].playCount.toLocaleString()}</Num>回。何度聴いても飽きない一曲。
+          <p className="mt-3 font-mono text-2xl font-bold text-white">
+            {topTracks[0].playCount.toLocaleString()}
+            <span className="text-sm font-normal text-strata-slate-500 ml-2">回再生</span>
           </p>
-        </Section>
+          <p className="mt-3 text-lg text-zinc-300 leading-relaxed">
+            何度聴いても飽きない一曲。
+          </p>
+        </div>
       )}
 
-      {/* Section 5: Your peak */}
+      {/* Section 5: Peak year */}
       {peakYear && (
-        <Section>
-          <p className="text-lg text-zinc-300 leading-relaxed">
-            <Stat>{peakYear.year}</Stat>年はあなたにとって最も濃密な年でした。
+        <div className="glass-card p-6">
+          <p className="text-sm text-strata-slate-400 mb-2">最も濃密な年</p>
+          <p className="font-mono text-4xl font-bold text-strata-amber-300 amber-glow">
+            {peakYear.year}
           </p>
-          <p className="mt-6 text-lg text-zinc-300 leading-relaxed">
+          <p className="mt-4 text-lg text-zinc-300 leading-relaxed">
             <Num>{peakYear.playCount.toLocaleString()}</Num>回の再生、
             <Num>{msToHours(peakYear.msPlayed).toLocaleString()}</Num>時間の没入。
           </p>
-        </Section>
+        </div>
       )}
 
-      {/* Section 6: Night */}
+      {/* Section 6: Night — with mini stat grid */}
       {nightArtist && peakHour && (
-        <Section>
+        <div className="glass-card p-6">
+          <p className="text-sm text-strata-slate-400 mb-4">真夜中の音楽</p>
           <p className="text-lg text-zinc-300 leading-relaxed">
-            真夜中の音楽はいつも<Name>{nightArtist.artistName}</Name>でした。
+            夜の相棒は<Name>{nightArtist.artistName}</Name>でした。
           </p>
-          <p className="mt-6 text-lg text-zinc-300 leading-relaxed">
-            深夜の再生は全体の<Num>{nightPercentage}%</Num>。
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-4 py-3">
+              <p className="text-xs text-strata-slate-500">深夜再生率</p>
+              <p className="mt-1 font-mono text-xl font-bold text-white">{nightPercentage}%</p>
+            </div>
+            <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-4 py-3">
+              <p className="text-xs text-strata-slate-500">ピークタイム</p>
+              <p className="mt-1 font-mono text-xl font-bold text-white">{formatHour(peakHour.hour)}</p>
+            </div>
+          </div>
+          <p className="mt-4 text-lg text-zinc-300 leading-relaxed">
+            <Name>{getListenerType(peakHour.hour)}</Name>なあなた。
           </p>
-          <p className="mt-6 text-lg text-zinc-300 leading-relaxed">
-            <Name>{getListenerType(peakHour.hour)}</Name>なあなたのピークタイムは
-            <Num>{formatHour(peakHour.hour)}</Num>。
-          </p>
-        </Section>
+        </div>
       )}
 
-      {/* Section 7: Closing */}
-      <section className="py-12">
+      {/* Section 7: Closing — plain centered text, geological signature */}
+      <div className="py-8 text-center">
         <p className="text-lg text-zinc-300 leading-relaxed">
           これがあなたの音楽の地層です。
         </p>
-        <p className="mt-6 text-lg text-zinc-300 leading-relaxed">
+        <p className="mt-4 text-lg text-zinc-300 leading-relaxed">
           日々の選曲が、静かに積み重なっていく。
         </p>
-      </section>
+        <p className="mt-8 text-xs tracking-wider text-strata-slate-500/50">
+          ── あなたの音楽の地層 ──
+        </p>
+      </div>
     </div>
   );
 }
