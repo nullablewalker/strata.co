@@ -5,6 +5,7 @@
  *   /           → Landing (public, redirects to /dashboard if already authed)
  *   /dashboard  → Dashboard   ┐
  *   /vault      → The Vault   │ All wrapped in ProtectedRoute + Layout
+ *   /vault/track/:id → Track Detail │
  *   /heatmap    → Heatmap     │ (requires Spotify auth, renders sidebar shell)
  *   /patterns   → Patterns    │
  *   /era-map    → Era Map     │
@@ -26,6 +27,7 @@ import Mosaic from "./pages/Mosaic";
 import Import from "./pages/Import";
 import Autobiography from "./pages/Autobiography";
 import Export from "./pages/Export";
+import TrackDetail from "./pages/TrackDetail";
 
 /**
  * Landing page — the only public route.
@@ -86,6 +88,7 @@ export default function App() {
           >
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/vault" element={<Vault />} />
+            <Route path="/vault/track/:trackSpotifyId" element={<TrackDetail />} />
             <Route path="/heatmap" element={<Heatmap />} />
             <Route path="/patterns" element={<Patterns />} />
             <Route path="/era-map" element={<EraMap />} />

@@ -88,6 +88,7 @@ vault.get("/tracks", async (c) => {
   const search = c.req.query("search");
   const artist = c.req.query("artist");
   const album = c.req.query("album");
+  const trackId = c.req.query("trackId");
   const limit = Math.min(Number(c.req.query("limit") ?? "50"), 200);
   const offset = Number(c.req.query("offset") ?? "0");
 
@@ -103,6 +104,9 @@ vault.get("/tracks", async (c) => {
   }
   if (album) {
     conditions.push(eq(lh.albumName, album));
+  }
+  if (trackId) {
+    conditions.push(eq(lh.trackSpotifyId, trackId));
   }
 
   const orderDir = orderParam === "asc" ? asc : desc;
@@ -154,6 +158,9 @@ vault.get("/tracks", async (c) => {
   }
   if (album) {
     countConditions.push(eq(lh.albumName, album));
+  }
+  if (trackId) {
+    countConditions.push(eq(lh.trackSpotifyId, trackId));
   }
 
   const countWhere = and(...countConditions);
