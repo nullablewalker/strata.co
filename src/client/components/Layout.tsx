@@ -80,6 +80,7 @@ export default function Layout() {
           }}
         />
         <div className="noise-overlay absolute inset-0" />
+        <div className="sediment-lines absolute inset-0" />
       </div>
 
       {/* Semi-transparent backdrop — closes sidebar on tap (mobile only). */}

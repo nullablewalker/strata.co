@@ -285,6 +285,13 @@ export default function Dashboard() {
           </Link>
         </div>
       )}
+
+      {/* Geological signature */}
+      {hasHistory && !loading && (
+        <p className="mt-12 text-center text-xs text-strata-slate-500/50 tracking-wider">
+          ── あなたの音楽の地層 ──
+        </p>
+      )}
     </div>
   );
 }
@@ -331,7 +338,7 @@ function TimeCapsuleCard({ capsule }: { capsule: TimeCapsuleYear }) {
   const remaining = tracks.length - DISPLAY_LIMIT;
 
   return (
-    <div className="glass-card p-5 transition-all hover:bg-white/[0.05] hover:border-strata-amber-400/15">
+    <div className="glass-card depth-ring p-5 transition-all hover:bg-white/[0.05] hover:border-strata-amber-400/15">
       {/* Header */}
       <div className="mb-3 flex items-baseline justify-between">
         <span className="font-mono text-sm text-amber-300">
@@ -384,7 +391,7 @@ function BentoStatTile({
         {icon}
       </span>
       <p className="text-sm text-strata-slate-400">{label}</p>
-      <p className="mt-1 font-mono text-3xl font-bold text-strata-amber-300">
+      <p className="mt-1 font-mono text-3xl font-bold text-strata-amber-300 amber-glow">
         {animated.toLocaleString()}
       </p>
       <p className="mt-1 text-xs text-strata-slate-500">{subtitle}</p>
@@ -433,7 +440,7 @@ function DormantArtistsSection({ artists }: { artists: DormantArtist[] }) {
   const visible = showAll ? artists : artists.slice(0, 5);
 
   return (
-    <div className="glass-card p-6">
+    <div className="glass-card depth-ring p-6">
       <h2 className="text-lg font-semibold text-white">
         眠れるアーティスト
       </h2>
@@ -529,7 +536,7 @@ function DriftReportCard({ drift }: { drift: DriftReport }) {
   const hasPrevData = Number(ps.totalPlays) > 0;
 
   return (
-    <div className="glass-card p-6">
+    <div className="glass-card depth-ring p-6">
       {/* Header */}
       <div className="mb-5">
         <h2 className="text-lg font-semibold text-strata-amber-300">

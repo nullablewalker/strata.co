@@ -437,7 +437,7 @@ export default function Heatmap() {
       )}
 
       {/* Heatmap */}
-      <div className="glass-card p-4">
+      <div className="glass-card depth-ring p-4">
         {loading ? (
           <HeatmapSkeleton />
         ) : error ? (
@@ -850,7 +850,7 @@ function StatCard({
   return (
     <div className="glass-card p-4">
       <p className="text-xs text-strata-slate-400">{label}</p>
-      <p className="mt-1 font-mono text-xl font-bold text-strata-amber-300">{value}</p>
+      <p className="mt-1 font-mono text-xl font-bold text-strata-amber-300 amber-glow">{value}</p>
       {sub && <p className="text-xs text-strata-slate-500">{sub}</p>}
     </div>
   );
