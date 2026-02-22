@@ -161,8 +161,45 @@ export default function Dashboard() {
       </p>
 
       {loading ? (
-        <div className="mt-8 flex justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-strata-amber-300 border-t-transparent" />
+        <div className="mt-8 space-y-8">
+          {/* Skeleton: Time Capsule area */}
+          <div>
+            <div className="h-6 w-40 rounded bg-strata-border/50 shimmer" />
+            <div className="mt-2 h-4 w-64 rounded bg-strata-border/30 shimmer" />
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {[...Array(2)].map((_, i) => (
+                <div key={i} className="glass-card p-5">
+                  <div className="mb-3 flex justify-between">
+                    <div className="h-4 w-24 rounded bg-strata-border/50 shimmer" />
+                    <div className="h-3 w-16 rounded bg-strata-border/30 shimmer" />
+                  </div>
+                  <div className="space-y-2">
+                    {[...Array(3)].map((_, j) => (
+                      <div key={j} className="h-4 w-full rounded bg-strata-border/40 shimmer" style={{ animationDelay: `${j * 0.15}s` }} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Skeleton: Stats cards */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="glass-card p-5">
+                <div className="h-4 w-16 rounded bg-strata-border/50 shimmer" />
+                <div className="mt-2 h-8 w-24 rounded bg-strata-border/40 shimmer" style={{ animationDelay: `${i * 0.1}s` }} />
+              </div>
+            ))}
+          </div>
+          {/* Skeleton: Quick links */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="glass-card p-5">
+                <div className="h-5 w-28 rounded bg-strata-border/50 shimmer" />
+                <div className="mt-2 h-4 w-40 rounded bg-strata-border/30 shimmer" />
+              </div>
+            ))}
+          </div>
         </div>
       ) : hasHistory ? (
         <>
@@ -196,7 +233,7 @@ export default function Dashboard() {
         </>
       ) : (
         /* Import CTA */
-        <div className="mt-8 rounded-lg border border-strata-border bg-strata-surface p-8 text-center">
+        <div className="mt-8 glass-card p-8 text-center">
           <h2 className="text-lg font-semibold text-strata-amber-300">
             Get Started
           </h2>
@@ -257,7 +294,7 @@ function TimeCapsuleCard({ capsule }: { capsule: TimeCapsuleYear }) {
   const remaining = tracks.length - DISPLAY_LIMIT;
 
   return (
-    <div className="rounded-lg border border-strata-border bg-strata-surface p-5">
+    <div className="glass-card p-5 transition-all hover:bg-white/[0.05] hover:border-strata-amber-400/15">
       {/* Header */}
       <div className="mb-3 flex items-baseline justify-between">
         <span className="font-mono text-sm text-amber-300">
@@ -295,7 +332,7 @@ function TimeCapsuleCard({ capsule }: { capsule: TimeCapsuleYear }) {
 /** Compact metric display card used in the stats grid. */
 function StatsCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-strata-border bg-strata-surface p-5">
+    <div className="glass-card p-5">
       <p className="text-sm text-strata-slate-400">{label}</p>
       <p className="mt-1 text-2xl font-bold text-strata-amber-300">{value}</p>
     </div>
@@ -315,7 +352,7 @@ function QuickLink({
   return (
     <Link
       to={to}
-      className="group rounded-lg border border-strata-border bg-strata-surface p-5 transition-colors hover:border-strata-amber-500/30"
+      className="group glass-card p-5 transition-all hover:border-strata-amber-400/20 hover:bg-white/[0.05]"
     >
       <p className="font-medium text-white group-hover:text-strata-amber-300">
         {title}
@@ -335,7 +372,7 @@ function DormantArtistsSection({ artists }: { artists: DormantArtist[] }) {
   const visible = showAll ? artists : artists.slice(0, 5);
 
   return (
-    <div className="mt-8 rounded-lg border border-strata-border bg-strata-surface p-6">
+    <div className="mt-8 glass-card p-6">
       <h2 className="text-lg font-semibold text-white">
         眠れるアーティスト
       </h2>
@@ -347,7 +384,7 @@ function DormantArtistsSection({ artists }: { artists: DormantArtist[] }) {
         {visible.map((artist) => (
           <div
             key={artist.artistName}
-            className="flex flex-col gap-1 rounded-md border border-strata-border/50 bg-strata-bg/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-1 rounded-md border border-white/[0.04] bg-white/[0.02] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           >
             <p className="font-medium text-amber-300">
               {artist.artistName}
@@ -431,7 +468,7 @@ function DriftReportCard({ drift }: { drift: DriftReport }) {
   const hasPrevData = Number(ps.totalPlays) > 0;
 
   return (
-    <div className="mt-8 rounded-lg border border-strata-border bg-strata-surface p-6">
+    <div className="mt-8 glass-card p-6">
       {/* Header */}
       <div className="mb-5">
         <h2 className="text-lg font-semibold text-strata-amber-300">
@@ -559,7 +596,7 @@ function DriftStat({
   displayValue?: string;
 }) {
   return (
-    <div className="rounded border border-strata-border bg-strata-bg/50 px-3 py-2.5">
+    <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2.5">
       <p className="text-xs text-strata-slate-500">{label}</p>
       <p className="mt-0.5 text-lg font-bold text-white">
         {displayValue ?? current.toLocaleString()}

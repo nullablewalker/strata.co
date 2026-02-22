@@ -188,7 +188,7 @@ export default function Import() {
 
       {/* Existing data status */}
       {status?.hasData && (
-        <div className="mt-6 rounded-lg border border-strata-border bg-strata-surface p-4">
+        <div className="mt-6 glass-card p-4">
           <p className="text-sm text-strata-slate-400">インポート済みデータ</p>
           <p className="mt-1 text-lg font-medium text-white">
             {status.totalTracks.toLocaleString()} トラック
@@ -258,8 +258,8 @@ export default function Import() {
       <div
         className={`mt-8 flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed transition-colors ${
           dragOver
-            ? "border-strata-amber-400 bg-strata-amber-500/10"
-            : "border-strata-border bg-strata-surface hover:border-strata-slate-500"
+            ? "border-strata-amber-400/40 bg-strata-amber-500/[0.05]"
+            : "border-white/[0.08] bg-white/[0.02] hover:border-strata-slate-500"
         }`}
         onDragOver={(e) => {
           e.preventDefault();
@@ -304,7 +304,7 @@ export default function Import() {
           {files.map((f, i) => (
             <div
               key={i}
-              className="flex items-center justify-between rounded-lg border border-strata-border bg-strata-surface px-4 py-3"
+              className="flex items-center justify-between rounded-lg border border-white/[0.04] bg-white/[0.02] px-4 py-3"
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate font-mono text-sm text-white">
