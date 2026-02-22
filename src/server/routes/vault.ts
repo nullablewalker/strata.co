@@ -327,6 +327,122 @@ vault.get("/metadata", async (c) => {
   return c.json({ data: result });
 });
 
+// --- Autobiography ---
+
+vault.get("/autobiography", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const db = createDb(c.env.DATABASE_URL);
+  const lh = listeningHistory;
+
+  // 1. Overall stats
+  const [overall] = await db
+    .select({
+      totalPlays: sql<number>`count(*)`,
+      totalMs: sql<number>`sum(${lh.msPlayed})`,
+      uniqueTracks: sql<number>`count(distinct ${lh.trackSpotifyId})`,
+      uniqueArtists: sql<number>`count(distinct ${lh.artistName})`,
+      firstPlay: sql<string>`min(${lh.playedAt})`,
+      lastPlay: sql<string>`max(${lh.playedAt})`,
+    })
+    .from(lh)
+    .where(eq(lh.userId, userId));
+
+  // 2. Top 5 artists by play count
+  const topArtists = await db
+    .select({
+      artistName: lh.artistName,
+      playCount: sql<number>`count(*)`,
+      msPlayed: sql<number>`sum(${lh.msPlayed})`,
+    })
+    .from(lh)
+    .where(eq(lh.userId, userId))
+    .groupBy(lh.artistName)
+    .orderBy(sql`count(*) desc`)
+    .limit(5);
+
+  // 3. Top 5 tracks by play count
+  const topTracks = await db
+    .select({
+      trackName: lh.trackName,
+      artistName: lh.artistName,
+      playCount: sql<number>`count(*)`,
+      msPlayed: sql<number>`sum(${lh.msPlayed})`,
+    })
+    .from(lh)
+    .where(eq(lh.userId, userId))
+    .groupBy(lh.trackName, lh.artistName)
+    .orderBy(sql`count(*) desc`)
+    .limit(5);
+
+  // 4. Peak hour
+  const [peakHour] = await db
+    .select({
+      hour: sql<number>`EXTRACT(HOUR FROM ${lh.playedAt})`,
+      playCount: sql<number>`count(*)`,
+    })
+    .from(lh)
+    .where(eq(lh.userId, userId))
+    .groupBy(sql`EXTRACT(HOUR FROM ${lh.playedAt})`)
+    .orderBy(sql`count(*) desc`)
+    .limit(1);
+
+  // 5. Most active year
+  const [peakYear] = await db
+    .select({
+      year: sql<number>`EXTRACT(YEAR FROM ${lh.playedAt})`,
+      playCount: sql<number>`count(*)`,
+      msPlayed: sql<number>`sum(${lh.msPlayed})`,
+    })
+    .from(lh)
+    .where(eq(lh.userId, userId))
+    .groupBy(sql`EXTRACT(YEAR FROM ${lh.playedAt})`)
+    .orderBy(sql`count(*) desc`)
+    .limit(1);
+
+  // 6. Night owl stats (plays between 22:00-03:59)
+  const [nightStats] = await db
+    .select({
+      playCount: sql<number>`count(*)`,
+    })
+    .from(lh)
+    .where(
+      and(
+        eq(lh.userId, userId),
+        sql`EXTRACT(HOUR FROM ${lh.playedAt}) IN (22, 23, 0, 1, 2, 3)`
+      )
+    );
+
+  // 7. Top night artist
+  const [nightArtist] = await db
+    .select({
+      artistName: lh.artistName,
+      playCount: sql<number>`count(*)`,
+    })
+    .from(lh)
+    .where(
+      and(
+        eq(lh.userId, userId),
+        sql`EXTRACT(HOUR FROM ${lh.playedAt}) IN (22, 23, 0, 1, 2, 3)`
+      )
+    )
+    .groupBy(lh.artistName)
+    .orderBy(sql`count(*) desc`)
+    .limit(1);
+
+  return c.json({
+    data: {
+      overall,
+      topArtists,
+      topTracks,
+      peakHour: peakHour || null,
+      peakYear: peakYear || null,
+      nightStats: nightStats || null,
+      nightArtist: nightArtist || null,
+    },
+  });
+});
+
 // --- Stats ---
 
 vault.get("/stats", async (c) => {

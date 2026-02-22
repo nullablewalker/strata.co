@@ -20,6 +20,7 @@ import Vault from "./pages/Vault";
 import Heatmap from "./pages/Heatmap";
 import Patterns from "./pages/Patterns";
 import Import from "./pages/Import";
+import Autobiography from "./pages/Autobiography";
 
 /**
  * Landing page — the only public route.
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="/heatmap" element={<Heatmap />} />
           <Route path="/patterns" element={<Patterns />} />
           <Route path="/import" element={<Import />} />
+          <Route path="/autobiography" element={<Autobiography />} />
         </Route>
       </Routes>
     </AuthProvider>

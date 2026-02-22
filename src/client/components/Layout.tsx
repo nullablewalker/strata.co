@@ -20,6 +20,7 @@ const navItems = [
   { to: "/vault", label: "The Vault" },
   { to: "/heatmap", label: "Heatmap" },
   { to: "/patterns", label: "Patterns" },
+  { to: "/autobiography", label: "Autobiography" },
   { to: "/import", label: "Import" },
 ];
 
