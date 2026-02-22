@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sql, eq, ilike, or, and, desc, asc, count, countDistinct } from "drizzle-orm";
+import { sql, eq, ilike, or, and, desc, asc, count, countDistinct, gte, lte } from "drizzle-orm";
 import { Spotify } from "arctic";
 import type { Session } from "hono-sessions";
 import type { Env } from "../types";
@@ -390,6 +390,57 @@ vault.get("/stats", async (c) => {
       topArtist: topArtist ?? null,
     },
   });
+});
+
+// --- Time Capsule ---
+
+vault.get("/time-capsule", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const db = createDb(c.env.DATABASE_URL);
+
+  const now = new Date();
+  const capsules = [];
+
+  // Check 1 year ago, 2 years ago, etc. (up to 5 years)
+  for (let yearsAgo = 1; yearsAgo <= 5; yearsAgo++) {
+    const targetDate = new Date(now);
+    targetDate.setFullYear(targetDate.getFullYear() - yearsAgo);
+
+    // Get the start and end of that day (UTC)
+    const dayStart = new Date(targetDate.toISOString().split("T")[0] + "T00:00:00Z");
+    const dayEnd = new Date(targetDate.toISOString().split("T")[0] + "T23:59:59Z");
+
+    const tracks = await db
+      .select({
+        trackName: listeningHistory.trackName,
+        artistName: listeningHistory.artistName,
+        albumName: listeningHistory.albumName,
+        trackSpotifyId: listeningHistory.trackSpotifyId,
+        msPlayed: listeningHistory.msPlayed,
+        playedAt: listeningHistory.playedAt,
+      })
+      .from(listeningHistory)
+      .where(
+        and(
+          eq(listeningHistory.userId, userId),
+          gte(listeningHistory.playedAt, dayStart),
+          lte(listeningHistory.playedAt, dayEnd)
+        )
+      )
+      .orderBy(listeningHistory.playedAt)
+      .limit(20);
+
+    if (tracks.length > 0) {
+      capsules.push({
+        yearsAgo,
+        date: dayStart.toISOString().split("T")[0],
+        tracks,
+      });
+    }
+  }
+
+  return c.json({ data: capsules });
 });
 
 export default vault;

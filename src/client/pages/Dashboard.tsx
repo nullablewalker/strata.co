@@ -2,8 +2,9 @@
  * Dashboard page — the first screen users see after login.
  *
  * Adapts its content based on whether the user has imported any listening data:
- *   - With data: shows summary stats (tracks, artists, hours) and quick-nav
- *     cards linking to Vault, Heatmap, and Patterns.
+ *   - With data: shows Time Capsule (tracks from this day in past years),
+ *     summary stats (tracks, artists, hours) and quick-nav cards linking to
+ *     Vault, Heatmap, and Patterns.
  *   - Without data: shows a single call-to-action pointing to the Import page
  *     so new users have a clear next step.
  */
@@ -19,6 +20,21 @@ interface VaultStats {
   totalMsPlayed: number;
 }
 
+interface TimeCapsuleTrack {
+  trackName: string;
+  artistName: string;
+  albumName: string | null;
+  trackSpotifyId: string;
+  msPlayed: number;
+  playedAt: string;
+}
+
+interface TimeCapsuleYear {
+  yearsAgo: number;
+  date: string;
+  tracks: TimeCapsuleTrack[];
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState<VaultStats | null>(null);
@@ -26,6 +42,7 @@ export default function Dashboard() {
   // This three-state approach prevents flashing the wrong UI during fetch.
   const [hasHistory, setHasHistory] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [capsules, setCapsules] = useState<TimeCapsuleYear[]>([]);
 
   // Fetch vault stats on mount to determine whether the user has any data.
   // If the request fails (e.g. no history yet), we treat it as "no data"
@@ -40,6 +57,15 @@ export default function Dashboard() {
         setHasHistory(false);
       })
       .finally(() => setLoading(false));
+
+    // Fetch time capsule data independently
+    apiFetch<ApiResponse<TimeCapsuleYear[]>>("/vault/time-capsule")
+      .then((res) => {
+        setCapsules(res.data);
+      })
+      .catch(() => {
+        // Silently ignore — capsule is optional
+      });
   }, []);
 
   return (
@@ -58,6 +84,9 @@ export default function Dashboard() {
         </div>
       ) : hasHistory ? (
         <>
+          {/* Time Capsule */}
+          {capsules.length > 0 && <TimeCapsule capsules={capsules} />}
+
           {/* Stats cards */}
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             <StatsCard label="Tracks" value={stats!.totalTracks.toLocaleString()} />
@@ -91,6 +120,78 @@ export default function Dashboard() {
             Import History
           </Link>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+const YEAR_LABELS: Record<number, string> = {
+  1: "1年前の今日",
+  2: "2年前の今日",
+  3: "3年前の今日",
+  4: "4年前の今日",
+  5: "5年前の今日",
+};
+
+/** Max tracks to display per year before showing "+N more" */
+const DISPLAY_LIMIT = 5;
+
+/** "What you were listening to on this day" section. */
+function TimeCapsule({ capsules }: { capsules: TimeCapsuleYear[] }) {
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold text-white">
+        あの日のあなた
+      </h2>
+      <p className="mt-1 text-sm text-strata-slate-500">
+        What you were listening to on this day
+      </p>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {capsules.map((capsule) => (
+          <TimeCapsuleCard key={capsule.yearsAgo} capsule={capsule} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** A single year's capsule card. */
+function TimeCapsuleCard({ capsule }: { capsule: TimeCapsuleYear }) {
+  const { yearsAgo, date, tracks } = capsule;
+  const displayTracks = tracks.slice(0, DISPLAY_LIMIT);
+  const remaining = tracks.length - DISPLAY_LIMIT;
+
+  return (
+    <div className="rounded-lg border border-strata-border bg-strata-surface p-5">
+      {/* Header */}
+      <div className="mb-3 flex items-baseline justify-between">
+        <span className="font-mono text-sm text-amber-300">
+          {YEAR_LABELS[yearsAgo] ?? `${yearsAgo}年前の今日`}
+        </span>
+        <span className="font-mono text-xs text-strata-slate-500">{date}</span>
+      </div>
+
+      {/* Track list */}
+      <ul className="space-y-1.5">
+        {displayTracks.map((t, i) => (
+          <li key={`${t.trackSpotifyId}-${i}`} className="leading-tight">
+            <span className="text-sm text-white">{t.trackName}</span>
+            <span className="ml-1.5 text-xs text-zinc-400">
+              {t.artistName}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {remaining > 0 && (
+        <p className="mt-2 text-xs text-strata-slate-500">
+          他{remaining}曲
+        </p>
       )}
     </div>
   );
