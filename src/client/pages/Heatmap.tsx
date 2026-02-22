@@ -33,6 +33,19 @@ interface HeatmapSummary {
   averageDailyPlays: number;
 }
 
+interface SilencePeriod {
+  startDate: string;
+  endDate: string;
+  days: number;
+  lastTrackBefore: { trackName: string; artistName: string } | null;
+  firstTrackAfter: { trackName: string; artistName: string } | null;
+}
+
+interface SilenceData {
+  silences: SilencePeriod[];
+  totalSilentDays: number;
+}
+
 // --- Chart layout constants ---
 // Each day is a small square; CELL_STEP includes the gap between cells.
 const CELL_SIZE = 12;
@@ -88,6 +101,7 @@ export default function Heatmap() {
   const [data, setData] = useState<HeatmapDay[]>([]);
   const [artists, setArtists] = useState<HeatmapArtist[]>([]);
   const [summary, setSummary] = useState<HeatmapSummary | null>(null);
+  const [silenceData, setSilenceData] = useState<SilenceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,13 +129,21 @@ export default function Heatmap() {
     if (artist) params.set("artist", artist);
     const qs = `?${params.toString()}`;
 
+    // Silence data is only fetched for "All Artists" (no artist filter)
+    // since silences are a whole-library concept.
+    const silencePromise = artist
+      ? Promise.resolve(null)
+      : apiFetch<{ data: SilenceData }>(`/heatmap/silences?year=${year}`).catch(() => null);
+
     Promise.all([
       apiFetch<{ data: HeatmapDay[] }>(`/heatmap/data${qs}`),
       apiFetch<{ data: HeatmapSummary }>(`/heatmap/summary${qs}`),
+      silencePromise,
     ])
-      .then(([dataRes, summaryRes]) => {
+      .then(([dataRes, summaryRes, silenceRes]) => {
         setData(dataRes.data);
         setSummary(summaryRes.data);
+        setSilenceData(silenceRes?.data ?? null);
       })
       .catch(() => setError("Failed to load heatmap data"))
       .finally(() => setLoading(false));
@@ -412,6 +434,36 @@ export default function Heatmap() {
         )}
       </div>
 
+      {/* Silence Map — periods of 3+ consecutive days with no plays */}
+      {!loading && !error && !artist && silenceData && (
+        <div className="rounded-xl border border-zinc-800 bg-strata-surface p-5">
+          <h2 className="text-lg font-semibold text-zinc-300">
+            沈黙の記録
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Records of Silence
+          </p>
+
+          {silenceData.silences.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-500 italic">
+              この年は途切れることなく音楽と共にありました
+            </p>
+          ) : (
+            <>
+              <p className="mt-3 text-sm text-zinc-400">
+                この年、合計{silenceData.totalSilentDays}日間の沈黙がありました
+              </p>
+
+              <div className="mt-4 space-y-3">
+                {silenceData.silences.map((s, i) => (
+                  <SilenceCard key={i} silence={s} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Tooltip (portal-style, positioned absolutely) */}
       <div
         ref={tooltipRef}
@@ -437,6 +489,47 @@ function StatCard({
       <p className="text-xs text-strata-slate-400">{label}</p>
       <p className="mt-1 text-xl font-bold text-strata-amber-300">{value}</p>
       {sub && <p className="text-xs text-strata-slate-500">{sub}</p>}
+    </div>
+  );
+}
+
+/** A compact card representing a single silence period with bookend tracks. */
+function SilenceCard({ silence }: { silence: SilencePeriod }) {
+  const start = new Date(silence.startDate + "T00:00:00Z");
+  const end = new Date(silence.endDate + "T00:00:00Z");
+
+  const formatJaDate = (d: Date) =>
+    `${d.getUTCMonth() + 1}月${d.getUTCDate()}日`;
+
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-strata-bg px-4 py-3">
+      {/* Date range header */}
+      <div className="flex items-baseline justify-between">
+        <p className="text-sm text-zinc-400">
+          {formatJaDate(start)} — {formatJaDate(end)}
+          <span className="ml-2 text-zinc-600">({silence.days}日間)</span>
+        </p>
+      </div>
+
+      {/* Bookend tracks */}
+      {(silence.lastTrackBefore || silence.firstTrackAfter) && (
+        <div className="mt-2 flex flex-col gap-1 text-xs text-zinc-600">
+          {silence.lastTrackBefore && (
+            <p>
+              <span className="text-zinc-500">沈黙の前</span>{" "}
+              {silence.lastTrackBefore.trackName}{" "}
+              <span className="text-zinc-700">— {silence.lastTrackBefore.artistName}</span>
+            </p>
+          )}
+          {silence.firstTrackAfter && (
+            <p>
+              <span className="text-zinc-500">沈黙の後</span>{" "}
+              {silence.firstTrackAfter.trackName}{" "}
+              <span className="text-zinc-700">— {silence.firstTrackAfter.artistName}</span>
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
