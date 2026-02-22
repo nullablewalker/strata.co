@@ -61,8 +61,13 @@ importRoutes.post("/history", async (c) => {
 
   const entries = parsed.data;
   const total = entries.length;
-  let skipped = 0;
   let duplicates = 0;
+  const skipReasons = {
+    tooShort: 0,
+    noTrackName: 0,
+    noSpotifyUri: 0,
+    noArtistName: 0,
+  };
 
   // --- Phase 1: Filter & Transform ---
   // Each entry must have sufficient play time, a track name, a valid Spotify URI,
@@ -81,31 +86,31 @@ importRoutes.post("/history", async (c) => {
   for (const entry of entries) {
     // Skip short plays — under 30s is not an intentional listen
     if (entry.ms_played < MIN_MS_PLAYED) {
-      skipped++;
+      skipReasons.tooShort++;
       continue;
     }
 
     // Skip entries without track name
     if (!entry.master_metadata_track_name) {
-      skipped++;
+      skipReasons.noTrackName++;
       continue;
     }
 
     // Skip entries without track URI
     if (!entry.spotify_track_uri) {
-      skipped++;
+      skipReasons.noSpotifyUri++;
       continue;
     }
 
     const trackId = extractTrackId(entry.spotify_track_uri);
     if (!trackId) {
-      skipped++;
+      skipReasons.noSpotifyUri++;
       continue;
     }
 
     // Skip entries without artist name
     if (!entry.master_metadata_album_artist_name) {
-      skipped++;
+      skipReasons.noArtistName++;
       continue;
     }
 
@@ -120,6 +125,12 @@ importRoutes.post("/history", async (c) => {
       source: "import",
     });
   }
+
+  const skipped =
+    skipReasons.tooShort +
+    skipReasons.noTrackName +
+    skipReasons.noSpotifyUri +
+    skipReasons.noArtistName;
 
   const db = createDb(c.env.DATABASE_URL);
 
@@ -165,6 +176,7 @@ importRoutes.post("/history", async (c) => {
     imported: newRows.length,
     skipped,
     duplicates,
+    skipReasons,
   };
 
   return c.json({ data: result });
