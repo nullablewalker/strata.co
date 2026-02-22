@@ -375,4 +375,44 @@ heatmapRoutes.get("/silences", async (c) => {
   return c.json({ data: { silences, totalSilentDays } });
 });
 
+/**
+ * GET /obsession — Monthly play count for a specific artist over their entire history.
+ *
+ * Powers the "Obsession Curve" line chart that reveals peaks of obsession,
+ * abandonment, and rediscovery for a single artist across time. Each row
+ * is one calendar month (YYYY-MM) with aggregate play count, total listening
+ * time, and unique track count.
+ *
+ * Requires the `artist` query parameter. Returns empty months array if omitted.
+ */
+heatmapRoutes.get("/obsession", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const db = createDb(c.env.DATABASE_URL);
+  const artist = c.req.query("artist");
+
+  if (!artist) {
+    return c.json({ data: { months: [] } });
+  }
+
+  const monthlyData = await db
+    .select({
+      month: sql<string>`to_char(${listeningHistory.playedAt}, 'YYYY-MM')`.as("month"),
+      playCount: sql<number>`count(*)`.as("playCount"),
+      msPlayed: sql<number>`sum(${listeningHistory.msPlayed})`.as("msPlayed"),
+      trackCount: sql<number>`count(distinct ${listeningHistory.trackSpotifyId})`.as("trackCount"),
+    })
+    .from(listeningHistory)
+    .where(
+      and(
+        eq(listeningHistory.userId, userId),
+        eq(listeningHistory.artistName, artist)
+      )
+    )
+    .groupBy(sql`to_char(${listeningHistory.playedAt}, 'YYYY-MM')`)
+    .orderBy(sql`to_char(${listeningHistory.playedAt}, 'YYYY-MM')`);
+
+  return c.json({ data: { artist, months: monthlyData } });
+});
+
 export default heatmapRoutes;
