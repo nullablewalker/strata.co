@@ -25,6 +25,18 @@ interface HeatmapArtist {
   totalPlays: number;
 }
 
+interface ObsessionMonth {
+  month: string;
+  playCount: number;
+  msPlayed: number;
+  trackCount: number;
+}
+
+interface ObsessionData {
+  artist: string;
+  months: ObsessionMonth[];
+}
+
 interface HeatmapSummary {
   totalPlays: number;
   activeDays: number;
@@ -59,6 +71,15 @@ const HEAT_COLORS = [
   "#8b3a1f", // heat-5
 ];
 
+// --- Obsession Curve chart constants ---
+const OC_AMBER_300 = "#d4a04a";
+const OC_AMBER_200 = "#e8c88c";
+const OC_AMBER_500 = "#a66b1f";
+const OC_SURFACE = "#1a1a1a";
+const OC_BORDER = "#2a2a2a";
+const OC_SLATE_400 = "#8b9eac";
+const OC_CHART_MARGIN = { top: 20, right: 20, bottom: 40, left: 50 };
+
 function formatDate(d: Date): string {
   return d.toLocaleDateString("en-US", {
     weekday: "short",
@@ -88,6 +109,7 @@ export default function Heatmap() {
   const [data, setData] = useState<HeatmapDay[]>([]);
   const [artists, setArtists] = useState<HeatmapArtist[]>([]);
   const [summary, setSummary] = useState<HeatmapSummary | null>(null);
+  const [obsessionData, setObsessionData] = useState<ObsessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -126,6 +148,20 @@ export default function Heatmap() {
       .catch(() => setError("Failed to load heatmap data"))
       .finally(() => setLoading(false));
   }, [year, artist]);
+
+  // Fetch Obsession Curve data when an artist is selected.
+  // This runs independently of the heatmap data fetch because it spans
+  // the artist's entire history (not scoped to a single year).
+  useEffect(() => {
+    if (!artist) {
+      setObsessionData(null);
+      return;
+    }
+    const params = new URLSearchParams({ artist });
+    apiFetch<{ data: ObsessionData }>(`/heatmap/obsession?${params.toString()}`)
+      .then((res) => setObsessionData(res.data))
+      .catch(() => setObsessionData(null));
+  }, [artist]);
 
   // --- D3 heatmap rendering ---
   // This callback imperatively builds the SVG grid. It is called via useEffect
@@ -412,6 +448,17 @@ export default function Heatmap() {
         )}
       </div>
 
+      {/* Obsession Curve — only shown when an artist is selected */}
+      {artist && obsessionData && obsessionData.months.length > 0 && (
+        <div className="rounded-xl border border-strata-border bg-strata-surface p-4">
+          <div className="mb-3">
+            <h2 className="text-lg font-semibold">Obsession Curve</h2>
+            <p className="text-sm text-amber-300">{obsessionData.artist}</p>
+          </div>
+          <ObsessionCurve data={obsessionData} />
+        </div>
+      )}
+
       {/* Tooltip (portal-style, positioned absolutely) */}
       <div
         ref={tooltipRef}
@@ -419,6 +466,234 @@ export default function Heatmap() {
         style={{ display: "none" }}
       />
     </div>
+  );
+}
+
+/**
+ * Obsession Curve — monthly line chart showing a single artist's play count over time.
+ * Reveals peaks of obsession, periods of abandonment, and moments of rediscovery.
+ * Uses D3 for rendering with ResizeObserver for responsive width.
+ */
+function ObsessionCurve({ data }: { data: ObsessionData }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  const draw = useCallback(() => {
+    const container = containerRef.current;
+    const svg = svgRef.current;
+    if (!container || !svg || data.months.length === 0) return;
+
+    const width = container.clientWidth;
+    const height = 250;
+    const m = OC_CHART_MARGIN;
+    const innerW = width - m.left - m.right;
+    const innerH = height - m.top - m.bottom;
+
+    const maxCount = d3.max(data.months, (d) => d.playCount) ?? 0;
+    const peakMonth = data.months.reduce(
+      (max, d) => (d.playCount > max.playCount ? d : max),
+      data.months[0],
+    );
+
+    // X scale — point scale maps each month string to an x position
+    const x = d3
+      .scalePoint<string>()
+      .domain(data.months.map((d) => d.month))
+      .range([0, innerW])
+      .padding(0.5);
+
+    // Y scale — 15% headroom above max
+    const y = d3
+      .scaleLinear()
+      .domain([0, maxCount * 1.15])
+      .nice()
+      .range([innerH, 0]);
+
+    const sel = d3.select(svg);
+    sel.selectAll("*").remove();
+    sel.attr("width", width).attr("height", height);
+
+    // Gradient fill beneath the line
+    const defs = sel.append("defs");
+    const gradient = defs
+      .append("linearGradient")
+      .attr("id", "obsession-area-gradient")
+      .attr("x1", "0")
+      .attr("y1", "0")
+      .attr("x2", "0")
+      .attr("y2", "1");
+    gradient
+      .append("stop")
+      .attr("offset", "0%")
+      .attr("stop-color", OC_AMBER_300)
+      .attr("stop-opacity", 0.3);
+    gradient
+      .append("stop")
+      .attr("offset", "100%")
+      .attr("stop-color", OC_AMBER_500)
+      .attr("stop-opacity", 0.02);
+
+    const g = sel
+      .append("g")
+      .attr("transform", `translate(${m.left},${m.top})`);
+
+    // Horizontal gridlines
+    g.append("g")
+      .attr("class", "grid")
+      .call(
+        d3
+          .axisLeft(y)
+          .ticks(5)
+          .tickSize(-innerW)
+          .tickFormat(() => ""),
+      )
+      .call((g) => g.select(".domain").remove())
+      .call((g) =>
+        g.selectAll(".tick line").attr("stroke", OC_BORDER).attr("stroke-opacity", 0.7),
+      );
+
+    // Area fill
+    const area = d3
+      .area<ObsessionMonth>()
+      .x((d) => x(d.month)!)
+      .y0(innerH)
+      .y1((d) => y(d.playCount))
+      .curve(d3.curveMonotoneX);
+
+    g.append("path")
+      .datum(data.months)
+      .attr("d", area)
+      .attr("fill", "url(#obsession-area-gradient)");
+
+    // Line
+    const line = d3
+      .line<ObsessionMonth>()
+      .x((d) => x(d.month)!)
+      .y((d) => y(d.playCount))
+      .curve(d3.curveMonotoneX);
+
+    g.append("path")
+      .datum(data.months)
+      .attr("d", line)
+      .attr("fill", "none")
+      .attr("stroke", OC_AMBER_300)
+      .attr("stroke-width", 2);
+
+    // Data point dots
+    const tooltip = d3.select(tooltipRef.current);
+
+    g.selectAll("circle.data-dot")
+      .data(data.months)
+      .join("circle")
+      .attr("class", "data-dot")
+      .attr("cx", (d) => x(d.month)!)
+      .attr("cy", (d) => y(d.playCount))
+      .attr("r", (d) => (d.month === peakMonth.month ? 6 : 4))
+      .attr("fill", OC_AMBER_300)
+      .attr("stroke", OC_SURFACE)
+      .attr("stroke-width", (d) => (d.month === peakMonth.month ? 2.5 : 1.5))
+      .style("cursor", "pointer")
+      .on("mouseenter", (event, d) => {
+        const minutes = Math.round(d.msPlayed / 60_000);
+        const timeStr =
+          minutes < 60
+            ? `${minutes}m`
+            : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+        tooltip
+          .style("display", "block")
+          .style("left", `${event.pageX + 12}px`)
+          .style("top", `${event.pageY - 12}px`)
+          .html(
+            `<div class="text-xs font-medium text-white">${d.playCount} plays</div>` +
+            `<div class="text-xs text-strata-slate-400 mt-0.5">${d.month}</div>` +
+            `<div class="text-xs text-strata-slate-500 mt-0.5">${timeStr} · ${d.trackCount} tracks</div>`
+          );
+      })
+      .on("mousemove", (event) => {
+        tooltip
+          .style("left", `${event.pageX + 12}px`)
+          .style("top", `${event.pageY - 12}px`);
+      })
+      .on("mouseleave", () => {
+        tooltip.style("display", "none");
+      });
+
+    // Peak month label
+    if (peakMonth.playCount > 0) {
+      g.append("text")
+        .attr("x", x(peakMonth.month)!)
+        .attr("y", y(peakMonth.playCount) - 12)
+        .attr("text-anchor", "middle")
+        .attr("font-size", "10px")
+        .attr("fill", OC_AMBER_200)
+        .text(`Peak: ${peakMonth.playCount}`);
+    }
+
+    // X axis — show a subset of month labels to avoid crowding
+    const monthCount = data.months.length;
+    const tickInterval = monthCount > 24 ? Math.ceil(monthCount / 12) : monthCount > 12 ? 2 : 1;
+    const tickValues = data.months
+      .filter((_, i) => i % tickInterval === 0)
+      .map((d) => d.month);
+
+    g.append("g")
+      .attr("transform", `translate(0,${innerH})`)
+      .call(
+        d3
+          .axisBottom(x)
+          .tickValues(tickValues)
+          .tickFormat((d) => {
+            // Show abbreviated format: "Jan '23"
+            const [yr, mo] = (d as string).split("-");
+            const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+            return `${monthNames[parseInt(mo, 10) - 1]} '${yr.slice(2)}`;
+          }),
+      )
+      .call((g) => g.select(".domain").attr("stroke", OC_BORDER))
+      .call((g) => g.selectAll(".tick line").attr("stroke", OC_BORDER))
+      .call((g) =>
+        g.selectAll(".tick text").attr("fill", OC_SLATE_400).attr("font-size", "10px"),
+      );
+
+    // Y axis
+    g.append("g")
+      .call(d3.axisLeft(y).ticks(5))
+      .call((g) => g.select(".domain").remove())
+      .call((g) => g.selectAll(".tick line").remove())
+      .call((g) =>
+        g.selectAll(".tick text").attr("fill", OC_SLATE_400).attr("font-size", "11px"),
+      );
+  }, [data]);
+
+  // Draw on mount and re-draw on container resize
+  useEffect(() => {
+    draw();
+    const observer = new ResizeObserver(draw);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [draw]);
+
+  if (data.months.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-strata-slate-400">
+        No data available for this artist
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <div ref={containerRef} className="w-full">
+        <svg ref={svgRef} className="w-full" />
+      </div>
+      {/* Tooltip (portal-style, positioned absolutely) */}
+      <div
+        ref={tooltipRef}
+        className="pointer-events-none fixed z-50 rounded-lg border border-strata-border bg-strata-surface px-3 py-2 shadow-lg"
+        style={{ display: "none" }}
+      />
+    </>
   );
 }
 
