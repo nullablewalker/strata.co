@@ -14,6 +14,7 @@
 import pages from "@hono/vite-cloudflare-pages";
 import devServer from "@hono/vite-dev-server";
 import adapter from "@hono/vite-dev-server/cloudflare";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -23,7 +24,7 @@ export default defineConfig(({ mode }) => {
   // then the default (server) build appends _worker.js without wiping dist/.
   if (mode === "client") {
     return {
-      plugins: [react()],
+      plugins: [react(), tailwindcss()],
       resolve: {
         alias: {
           "@": "/src",
@@ -46,6 +47,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
+      tailwindcss(),
       // Builds Hono entry into _worker.js for Cloudflare Pages Functions.
       // emptyOutDir is false so the client assets already in dist/ are preserved.
       pages({
