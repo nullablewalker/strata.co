@@ -11,15 +11,13 @@
  * All charts share the same warm amber palette and are responsive via
  * ResizeObserver, re-drawing on container width changes.
  *
- * Filters: year selector and a Swinsian-style 3-column browser (Genre,
- * Artist, Album) allow cascading drill-down. The "listener type" badge
+ * Filters: year selector allows filtering by year. The "listener type" badge
  * (e.g. "Night Owl") provides a fun personality label derived from the data.
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as d3 from "d3";
 import { apiFetch } from "../lib/api";
 import { Link } from "react-router-dom";
-import ColumnBrowser from "../components/ColumnBrowser";
 
 // --- Types ---
 
@@ -581,101 +579,14 @@ export default function Patterns() {
   const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<string>("");
 
-  // Column browser state — cascading filters for Genre > Artist > Album
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
-  const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
-  const [artists, setArtists] = useState<string[]>([]);
-  const [albums, setAlbums] = useState<string[]>([]);
-  const [browserLoading, setBrowserLoading] = useState(true);
-
-  // Fetch artist list for the column browser. Re-runs when year changes.
-  const fetchArtists = useCallback(async (year: string) => {
-    const params = new URLSearchParams();
-    if (year) params.set("year", year);
-    const qs = params.toString() ? `?${params.toString()}` : "";
-
-    try {
-      const res = await apiFetch<{ data: string[] }>(`/patterns/artists${qs}`);
-      setArtists(res.data);
-    } catch {
-      setArtists([]);
-    }
-  }, []);
-
-  // Fetch album list for the column browser. Re-runs when year or artist changes.
-  const fetchAlbums = useCallback(async (year: string, artist: string | null) => {
-    const params = new URLSearchParams();
-    if (year) params.set("year", year);
-    if (artist) params.set("artist", artist);
-    const qs = params.toString() ? `?${params.toString()}` : "";
-
-    try {
-      const res = await apiFetch<{ data: string[] }>(`/patterns/albums${qs}`);
-      setAlbums(res.data);
-    } catch {
-      setAlbums([]);
-    }
-  }, []);
-
-  // Fetch browser data on mount and when year changes
-  useEffect(() => {
-    setBrowserLoading(true);
-    Promise.all([
-      fetchArtists(selectedYear),
-      fetchAlbums(selectedYear, selectedArtist),
-    ]).finally(() => setBrowserLoading(false));
-  }, [selectedYear, selectedArtist, fetchArtists, fetchAlbums]);
-
-  // Cascading selection handlers
-  const handleGenreSelect = useCallback((_genre: string | null) => {
-    // Genre is a placeholder for now — no filtering effect yet
-    setSelectedGenre(_genre);
-    setSelectedArtist(null);
-    setSelectedAlbum(null);
-  }, []);
-
-  const handleArtistSelect = useCallback((artist: string | null) => {
-    setSelectedArtist(artist);
-    setSelectedAlbum(null);
-  }, []);
-
-  const handleAlbumSelect = useCallback((album: string | null) => {
-    setSelectedAlbum(album);
-  }, []);
-
-  // Reset column browser when year changes
-  const handleYearChange = useCallback((year: string) => {
-    setSelectedYear(year);
-    setSelectedGenre(null);
-    setSelectedArtist(null);
-    setSelectedAlbum(null);
-  }, []);
-
-  // Fetch all four pattern datasets in parallel. Re-runs when any filter changes.
+  // Fetch all pattern datasets in parallel. Re-runs when year changes.
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     const params = new URLSearchParams();
     if (selectedYear) params.set("year", selectedYear);
-    if (selectedArtist) params.set("artist", selectedArtist);
-    if (selectedAlbum) params.set("album", selectedAlbum);
     const qs = params.toString() ? `?${params.toString()}` : "";
-
-    // time-artists only supports year filter (not artist/album)
-    const timeArtistsParams = new URLSearchParams();
-    if (selectedYear) timeArtistsParams.set("year", selectedYear);
-    const timeArtistsQs = timeArtistsParams.toString()
-      ? `?${timeArtistsParams.toString()}`
-      : "";
-
-    // devices and shuffle only support year filter (not artist/album)
-    const yearOnlyParams = new URLSearchParams();
-    if (selectedYear) yearOnlyParams.set("year", selectedYear);
-    const yearOnlyQs = yearOnlyParams.toString()
-      ? `?${yearOnlyParams.toString()}`
-      : "";
 
     try {
       const [overviewRes, hourlyRes, weeklyRes, monthlyRes, timeArtistsRes, devicesRes, shuffleRes] =
@@ -684,9 +595,9 @@ export default function Patterns() {
           apiFetch<{ data: HourlyData[] }>(`/patterns/hourly${qs}`),
           apiFetch<{ data: WeeklyData[] }>(`/patterns/weekly${qs}`),
           apiFetch<{ data: MonthlyData[] }>(`/patterns/monthly${qs}`),
-          apiFetch<{ data: TimeArtistsData }>(`/patterns/time-artists${timeArtistsQs}`),
-          apiFetch<{ data: DeviceData[] }>(`/patterns/devices${yearOnlyQs}`),
-          apiFetch<{ data: ShuffleData }>(`/patterns/shuffle${yearOnlyQs}`),
+          apiFetch<{ data: TimeArtistsData }>(`/patterns/time-artists${qs}`),
+          apiFetch<{ data: DeviceData[] }>(`/patterns/devices${qs}`),
+          apiFetch<{ data: ShuffleData }>(`/patterns/shuffle${qs}`),
         ]);
 
       setOverview(overviewRes.data);
@@ -701,7 +612,7 @@ export default function Patterns() {
     } finally {
       setLoading(false);
     }
-  }, [selectedYear, selectedArtist, selectedAlbum]);
+  }, [selectedYear]);
 
   useEffect(() => {
     fetchData();
@@ -728,7 +639,7 @@ export default function Patterns() {
           </label>
           <select
             value={selectedYear}
-            onChange={(e) => handleYearChange(e.target.value)}
+            onChange={(e) => setSelectedYear(e.target.value)}
             className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-sm text-white focus:border-strata-amber-500 focus:outline-none"
           >
             <option value="">すべて</option>
@@ -740,20 +651,6 @@ export default function Patterns() {
           </select>
         </div>
       </div>
-
-      {/* Column Browser */}
-      <ColumnBrowser
-        genres={[]}
-        artists={artists}
-        albums={albums}
-        selectedGenre={selectedGenre}
-        selectedArtist={selectedArtist}
-        selectedAlbum={selectedAlbum}
-        onGenreSelect={handleGenreSelect}
-        onArtistSelect={handleArtistSelect}
-        onAlbumSelect={handleAlbumSelect}
-        loading={browserLoading}
-      />
 
       {/* Error state */}
       {error && (
