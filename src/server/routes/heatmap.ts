@@ -13,7 +13,7 @@
  * All routes require authentication.
  */
 import { Hono } from "hono";
-import { and, count, desc, eq, gte, lt, sql, sum } from "drizzle-orm";
+import { and, count, desc, eq, gte, lte, lt, sql, sum } from "drizzle-orm";
 import type { Session } from "hono-sessions";
 import type { Env } from "../types";
 import { createDb } from "../db";
@@ -258,6 +258,48 @@ heatmapRoutes.get("/obsession", async (c) => {
     .orderBy(sql`to_char(${listeningHistory.playedAt}, 'YYYY-MM')`);
 
   return c.json({ data: { artist, months: monthlyData } });
+});
+
+/**
+ * GET /day — All tracks played on a specific day, with timestamps.
+ *
+ * Powers the heatmap drill-down panel: clicking a day cell fetches the
+ * full track list for that day, ordered chronologically. Returns each
+ * track's name, artist, album, Spotify ID, duration, and timestamp.
+ *
+ * Requires `date` query parameter in YYYY-MM-DD format.
+ */
+heatmapRoutes.get("/day", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const db = createDb(c.env.DATABASE_URL);
+  const date = c.req.query("date"); // YYYY-MM-DD
+
+  if (!date) return c.json({ data: [] });
+
+  const dayStart = new Date(`${date}T00:00:00Z`);
+  const dayEnd = new Date(`${date}T23:59:59Z`);
+
+  const tracks = await db
+    .select({
+      trackName: listeningHistory.trackName,
+      artistName: listeningHistory.artistName,
+      albumName: listeningHistory.albumName,
+      trackSpotifyId: listeningHistory.trackSpotifyId,
+      msPlayed: listeningHistory.msPlayed,
+      playedAt: listeningHistory.playedAt,
+    })
+    .from(listeningHistory)
+    .where(
+      and(
+        eq(listeningHistory.userId, userId),
+        gte(listeningHistory.playedAt, dayStart),
+        lte(listeningHistory.playedAt, dayEnd)
+      )
+    )
+    .orderBy(listeningHistory.playedAt);
+
+  return c.json({ data: tracks });
 });
 
 export default heatmapRoutes;

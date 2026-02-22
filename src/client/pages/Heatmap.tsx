@@ -45,6 +45,15 @@ interface HeatmapSummary {
   averageDailyPlays: number;
 }
 
+interface DayTrack {
+  trackName: string;
+  artistName: string;
+  albumName: string | null;
+  trackSpotifyId: string;
+  msPlayed: number;
+  playedAt: string;
+}
+
 // --- Chart layout constants ---
 // Each day is a small square; CELL_STEP includes the gap between cells.
 const CELL_SIZE = 12;
@@ -110,6 +119,9 @@ export default function Heatmap() {
   const [artists, setArtists] = useState<HeatmapArtist[]>([]);
   const [summary, setSummary] = useState<HeatmapSummary | null>(null);
   const [obsessionData, setObsessionData] = useState<ObsessionData | null>(null);
+  const [selectedDay, setSelectedDay] = useState<{ date: string; count: number } | null>(null);
+  const [dayTracks, setDayTracks] = useState<DayTrack[]>([]);
+  const [dayLoading, setDayLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,6 +144,7 @@ export default function Heatmap() {
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setSelectedDay(null);
 
     const params = new URLSearchParams({ year: String(year) });
     if (artist) params.set("artist", artist);
@@ -293,6 +306,16 @@ export default function Heatmap() {
       })
       .on("mouseleave", () => {
         tooltip.style("display", "none");
+      })
+      .on("click", (_event, d) => {
+        if (d.count === 0) return;
+        const dateStr = d.date.toISOString().slice(0, 10);
+        setSelectedDay({ date: dateStr, count: d.count });
+        setDayLoading(true);
+        apiFetch<{ data: DayTrack[] }>(`/heatmap/day?date=${dateStr}`)
+          .then((res) => setDayTracks(res.data))
+          .catch(() => setDayTracks([]))
+          .finally(() => setDayLoading(false));
       });
   }, [data, year, currentYear]);
 
@@ -447,6 +470,71 @@ export default function Heatmap() {
           </div>
         )}
       </div>
+
+      {/* Day drill-down — shown when a heatmap cell is clicked */}
+      {selectedDay && (
+        <div className="rounded-xl border border-strata-border bg-strata-surface p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-white">
+                {formatDate(new Date(selectedDay.date + "T00:00:00Z"))}
+              </h3>
+              <p className="text-sm text-zinc-400">
+                {selectedDay.count} play{selectedDay.count !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <button
+              onClick={() => setSelectedDay(null)}
+              className="text-zinc-400 hover:text-white transition-colors"
+              aria-label="Close drill-down"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+          {dayLoading ? (
+            <div className="animate-pulse space-y-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 py-1.5 px-2">
+                  <div className="h-4 w-12 rounded bg-strata-border" />
+                  <div className="flex-1 space-y-1">
+                    <div className="h-4 w-48 rounded bg-strata-border" />
+                    <div className="h-3 w-32 rounded bg-strata-border" />
+                  </div>
+                  <div className="h-4 w-10 rounded bg-strata-border" />
+                </div>
+              ))}
+            </div>
+          ) : dayTracks.length === 0 ? (
+            <p className="py-4 text-center text-sm text-zinc-400">No tracks found</p>
+          ) : (
+            <div className="space-y-0.5 max-h-80 overflow-y-auto">
+              {dayTracks.map((track, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-strata-border/30 transition-colors"
+                >
+                  <span className="text-xs font-mono text-zinc-500 w-12 shrink-0">
+                    {new Date(track.playedAt).toLocaleTimeString("ja-JP", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      timeZone: "UTC",
+                    })}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white truncate">{track.trackName}</p>
+                    <p className="text-xs text-zinc-400 truncate">{track.artistName}</p>
+                  </div>
+                  <span className="text-xs text-zinc-500 shrink-0">
+                    {formatMinutes(track.msPlayed)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Obsession Curve — only shown when an artist is selected */}
       {artist && obsessionData && obsessionData.months.length > 0 && (
