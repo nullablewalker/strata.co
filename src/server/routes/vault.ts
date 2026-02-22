@@ -443,4 +443,37 @@ vault.get("/time-capsule", async (c) => {
   return c.json({ data: capsules });
 });
 
+// --- Dormant Artists ---
+
+vault.get("/dormant-artists", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const db = createDb(c.env.DATABASE_URL);
+
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180);
+
+  // Get artists with significant listening but no recent plays
+  const artists = await db
+    .select({
+      artistName: listeningHistory.artistName,
+      totalMsPlayed: sql<number>`sum(${listeningHistory.msPlayed})`.as("totalMsPlayed"),
+      playCount: sql<number>`count(*)`.as("playCount"),
+      lastPlayed: sql<string>`max(${listeningHistory.playedAt})`.as("lastPlayed"),
+    })
+    .from(listeningHistory)
+    .where(eq(listeningHistory.userId, userId))
+    .groupBy(listeningHistory.artistName)
+    .having(
+      and(
+        gte(sql`sum(${listeningHistory.msPlayed})`, 3600000),
+        lte(sql`max(${listeningHistory.playedAt})`, sixMonthsAgo)
+      )
+    )
+    .orderBy(sql`sum(${listeningHistory.msPlayed}) desc`)
+    .limit(10);
+
+  return c.json({ data: artists });
+});
+
 export default vault;
