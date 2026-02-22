@@ -402,6 +402,78 @@ patterns.get("/time-artists", async (c) => {
 });
 
 /**
+ * GET /devices — Play count and total ms_played per platform/device.
+ *
+ * Returns a breakdown of which platforms (iOS, macOS, Android, web, etc.)
+ * the user listens on. Supports optional ?year= query filter.
+ */
+patterns.get("/devices", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const year = c.req.query("year");
+
+  const db = createDb(c.env.DATABASE_URL);
+  const lh = listeningHistory;
+
+  const conditions = [eq(lh.userId, userId), sql`${lh.platform} IS NOT NULL`];
+
+  if (year) {
+    conditions.push(
+      sql`EXTRACT(YEAR FROM ${lh.playedAt}) = ${Number(year)}`,
+    );
+  }
+
+  const rows = await db
+    .select({
+      platform: sql<string>`COALESCE(${lh.platform}, 'unknown')`,
+      playCount: sql<number>`count(*)`.mapWith(Number),
+      totalMs: sql<string>`sum(${lh.msPlayed})::bigint`,
+    })
+    .from(lh)
+    .where(and(...conditions))
+    .groupBy(lh.platform)
+    .orderBy(sql`count(*) DESC`);
+
+  return c.json({ data: rows });
+});
+
+/**
+ * GET /shuffle — Shuffle vs intentional play ratio.
+ *
+ * Returns counts of shuffle plays, intentional plays, and total plays
+ * where the shuffle flag is not null. Supports optional ?year= query filter.
+ */
+patterns.get("/shuffle", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const year = c.req.query("year");
+
+  const db = createDb(c.env.DATABASE_URL);
+  const lh = listeningHistory;
+
+  const conditions = [eq(lh.userId, userId)];
+
+  if (year) {
+    conditions.push(
+      sql`EXTRACT(YEAR FROM ${lh.playedAt}) = ${Number(year)}`,
+    );
+  }
+
+  const where = conditions.length === 1 ? conditions[0] : and(...conditions)!;
+
+  const [row] = await db
+    .select({
+      shufflePlays: sql<number>`count(*) FILTER (WHERE ${lh.shuffle} = true)`.mapWith(Number),
+      intentionalPlays: sql<number>`count(*) FILTER (WHERE ${lh.shuffle} = false)`.mapWith(Number),
+      total: sql<number>`count(*) FILTER (WHERE ${lh.shuffle} IS NOT NULL)`.mapWith(Number),
+    })
+    .from(lh)
+    .where(where);
+
+  return c.json({ data: row });
+});
+
+/**
  * GET /artists — Distinct artist names from the user's listening history.
  *
  * Sorted by total play count descending so the most-listened artists appear

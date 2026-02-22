@@ -81,6 +81,11 @@ importRoutes.post("/history", async (c) => {
     msPlayed: number;
     playedAt: Date;
     source: string;
+    reasonStart: string | null;
+    reasonEnd: string | null;
+    skipped: boolean | null;
+    platform: string | null;
+    shuffle: boolean | null;
   }> = [];
 
   for (const entry of entries) {
@@ -123,6 +128,11 @@ importRoutes.post("/history", async (c) => {
       msPlayed: entry.ms_played,
       playedAt: new Date(entry.ts),
       source: "import",
+      reasonStart: entry.reason_start ?? null,
+      reasonEnd: entry.reason_end ?? null,
+      skipped: entry.skipped ?? null,
+      platform: entry.platform ?? null,
+      shuffle: entry.shuffle ?? null,
     });
   }
 

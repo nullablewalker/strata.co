@@ -43,6 +43,8 @@ interface HeatmapSummary {
   longestStreak: number;
   mostActiveDay: { date: string; count: number } | null;
   averageDailyPlays: number;
+  completionRate: number | null;
+  activeSelectionRate: number | null;
 }
 
 interface SilencePeriod {
@@ -433,6 +435,12 @@ export default function Heatmap() {
             }
           />
           <StatCard label="Daily Average" value={String(summary.averageDailyPlays)} />
+          {summary.completionRate !== null && (
+            <StatCard label="完走率" value={`${summary.completionRate}%`} />
+          )}
+          {summary.activeSelectionRate !== null && (
+            <StatCard label="能動的選曲" value={`${summary.activeSelectionRate}%`} />
+          )}
         </div>
       )}
 

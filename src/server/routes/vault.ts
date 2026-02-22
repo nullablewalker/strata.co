@@ -104,6 +104,8 @@ vault.get("/tracks", async (c) => {
       totalMsPlayed: sql<number>`sum(${lh.msPlayed})`.mapWith(Number),
       firstPlayedAt: sql<string>`min(${lh.playedAt})`,
       lastPlayedAt: sql<string>`max(${lh.playedAt})`,
+      completionCount: sql<number>`count(*) FILTER (WHERE ${lh.reasonEnd} = 'trackdone')`.mapWith(Number),
+      skipCount: sql<number>`count(*) FILTER (WHERE ${lh.skipped} = true)`.mapWith(Number),
     })
     .from(lh)
     .where(whereClause)
@@ -543,6 +545,28 @@ vault.get("/stats", async (c) => {
     .orderBy(desc(sql`count(*)`))
     .limit(1);
 
+  // Completion rate (tracks listened to the end)
+  const completionResult = await db.execute(sql`
+    SELECT
+      COUNT(*) FILTER (WHERE reason_end = 'trackdone') as completed,
+      COUNT(*) FILTER (WHERE reason_end IS NOT NULL) as total
+    FROM listening_history WHERE user_id = ${userId}
+  `);
+  const completionRate = Number(completionResult.rows[0]?.total) > 0
+    ? Math.round((Number(completionResult.rows[0].completed) / Number(completionResult.rows[0].total)) * 100)
+    : null;
+
+  // Skip rate
+  const skipResult = await db.execute(sql`
+    SELECT
+      COUNT(*) FILTER (WHERE skipped = true) as skipped,
+      COUNT(*) FILTER (WHERE skipped IS NOT NULL) as total
+    FROM listening_history WHERE user_id = ${userId}
+  `);
+  const skipRate = Number(skipResult.rows[0]?.total) > 0
+    ? Math.round((Number(skipResult.rows[0].skipped) / Number(skipResult.rows[0].total)) * 100)
+    : null;
+
   return c.json({
     data: {
       totalTracks: overview?.totalTracks ?? 0,
@@ -555,6 +579,8 @@ vault.get("/stats", async (c) => {
       },
       topTrack: topTrack ?? null,
       topArtist: topArtist ?? null,
+      completionRate,
+      skipRate,
     },
   });
 });

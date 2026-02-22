@@ -28,6 +28,8 @@ interface VaultStats {
     playCount: number;
   } | null;
   topArtist: { artistName: string; playCount: number } | null;
+  completionRate: number | null;
+  skipRate: number | null;
 }
 
 interface TrackMetadata {
@@ -307,9 +309,11 @@ export default function Vault() {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {statsLoading ? (
           <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
             <StatCardSkeleton />
             <StatCardSkeleton />
             <StatCardSkeleton />
@@ -329,6 +333,12 @@ export default function Vault() {
               }
               small
             />
+            {stats.completionRate !== null && (
+              <StatCard label="Completion Rate" value={`${stats.completionRate}%`} />
+            )}
+            {stats.skipRate !== null && (
+              <StatCard label="Skip Rate" value={`${stats.skipRate}%`} />
+            )}
           </>
         ) : null}
       </div>
