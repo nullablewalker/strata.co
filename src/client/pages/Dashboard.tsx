@@ -74,6 +74,27 @@ function formatMonthJa(ym: string): string {
   return `${year}年${Number(month)}月`;
 }
 
+/** Animated counter — counts from 0 to `target` over `duration` ms. */
+function useCountUp(target: number, duration = 1200): number {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (target === 0) { setValue(0); return; }
+    const start = performance.now();
+    let raf: number;
+    const step = (now: number) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease-out cubic for smooth deceleration
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.floor(eased * target));
+      if (progress < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return value;
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState<VaultStats | null>(null);
@@ -151,7 +172,7 @@ export default function Dashboard() {
   }, [hasHistory]);
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-6xl">
       <h1 className="text-2xl font-bold">
         Welcome back
         {user?.displayName ? `, ${user.displayName}` : ""}
@@ -161,9 +182,9 @@ export default function Dashboard() {
       </p>
 
       {loading ? (
-        <div className="mt-8 space-y-8">
-          {/* Skeleton: Time Capsule area */}
-          <div>
+        <div className="mt-8 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Skeleton: Time Capsule */}
+          <div className="sm:col-span-2 lg:col-span-3">
             <div className="h-6 w-40 rounded bg-strata-border/50 shimmer" />
             <div className="mt-2 h-4 w-64 rounded bg-strata-border/30 shimmer" />
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -182,55 +203,71 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-          {/* Skeleton: Stats cards */}
-          <div className="grid gap-4 sm:grid-cols-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="glass-card p-5">
-                <div className="h-4 w-16 rounded bg-strata-border/50 shimmer" />
-                <div className="mt-2 h-8 w-24 rounded bg-strata-border/40 shimmer" style={{ animationDelay: `${i * 0.1}s` }} />
-              </div>
-            ))}
-          </div>
-          {/* Skeleton: Quick links */}
-          <div className="grid gap-4 sm:grid-cols-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="glass-card p-5">
-                <div className="h-5 w-28 rounded bg-strata-border/50 shimmer" />
-                <div className="mt-2 h-4 w-40 rounded bg-strata-border/30 shimmer" />
-              </div>
-            ))}
-          </div>
+          {/* Skeleton: Stat tiles */}
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="glass-card p-6">
+              <div className="h-4 w-16 rounded bg-strata-border/50 shimmer" />
+              <div className="mt-2 h-9 w-28 rounded bg-strata-border/40 shimmer" style={{ animationDelay: `${i * 0.1}s` }} />
+              <div className="mt-2 h-3 w-20 rounded bg-strata-border/30 shimmer" />
+            </div>
+          ))}
+          {/* Skeleton: Nav tiles */}
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="glass-card p-5">
+              <div className="h-5 w-28 rounded bg-strata-border/50 shimmer" />
+              <div className="mt-2 h-4 w-40 rounded bg-strata-border/30 shimmer" />
+              <div className="mt-4 h-3 w-16 rounded bg-strata-border/30 shimmer" />
+            </div>
+          ))}
         </div>
       ) : hasHistory ? (
-        <>
-          {/* Time Capsule */}
-          {capsules.length > 0 && <TimeCapsule capsules={capsules} />}
-
-          {/* Stats cards */}
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <StatsCard label="Tracks" value={stats!.totalTracks.toLocaleString()} />
-            <StatsCard label="Artists" value={stats!.totalArtists.toLocaleString()} />
-            <StatsCard
-              label="Hours Listened"
-              value={Math.floor(stats!.totalMsPlayed / 3_600_000).toLocaleString()}
-            />
-          </div>
-
-          {/* Quick links */}
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <QuickLink to="/vault" title="The Vault" desc="Browse your full library" />
-            <QuickLink to="/heatmap" title="Fandom Heatmap" desc="Visualize listening intensity" />
-            <QuickLink to="/patterns" title="Patterns" desc="Discover listening habits" />
-          </div>
-
-          {/* Dormant Artists */}
-          {dormantArtists.length > 0 && (
-            <DormantArtistsSection artists={dormantArtists} />
+        <div className="mt-8 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Time Capsule — spans full width */}
+          {capsules.length > 0 && (
+            <div className="sm:col-span-2 lg:col-span-3">
+              <TimeCapsule capsules={capsules} />
+            </div>
           )}
 
-          {/* Drift Report */}
-          {drift && <DriftReportCard drift={drift} />}
-        </>
+          {/* Stats tiles — each is a bento tile */}
+          <BentoStatTile
+            label="Tracks"
+            value={stats!.totalTracks}
+            subtitle="楽曲"
+            icon="♫"
+          />
+          <BentoStatTile
+            label="Artists"
+            value={stats!.totalArtists}
+            subtitle="アーティスト"
+            icon="🎤"
+          />
+          <BentoStatTile
+            label="Hours"
+            value={Math.floor(stats!.totalMsPlayed / 3_600_000)}
+            subtitle="時間の音楽体験"
+            icon="⏱"
+          />
+
+          {/* Quick links — styled as bento navigation tiles */}
+          <BentoNavTile to="/vault" title="The Vault" desc="Browse your full library" accent="amber" />
+          <BentoNavTile to="/heatmap" title="Fandom Heatmap" desc="Visualize listening intensity" accent="amber" />
+          <BentoNavTile to="/patterns" title="Patterns" desc="Discover listening habits" accent="amber" />
+
+          {/* Dormant Artists — spans 2 columns on lg */}
+          {dormantArtists.length > 0 && (
+            <div className="sm:col-span-2 lg:col-span-2">
+              <DormantArtistsSection artists={dormantArtists} />
+            </div>
+          )}
+
+          {/* Drift Report — spans full row */}
+          {drift && (
+            <div className="sm:col-span-2 lg:col-span-3">
+              <DriftReportCard drift={drift} />
+            </div>
+          )}
+        </div>
       ) : (
         /* Import CTA */
         <div className="mt-8 glass-card p-8 text-center">
@@ -270,7 +307,7 @@ const DISPLAY_LIMIT = 5;
 /** "What you were listening to on this day" section. */
 function TimeCapsule({ capsules }: { capsules: TimeCapsuleYear[] }) {
   return (
-    <section className="mt-8">
+    <section>
       <h2 className="text-lg font-semibold text-white">
         あの日のあなた
       </h2>
@@ -329,18 +366,33 @@ function TimeCapsuleCard({ capsule }: { capsule: TimeCapsuleYear }) {
   );
 }
 
-/** Compact metric display card used in the stats grid. */
-function StatsCard({ label, value }: { label: string; value: string }) {
+function BentoStatTile({
+  label,
+  value,
+  subtitle,
+  icon,
+}: {
+  label: string;
+  value: number;
+  subtitle: string;
+  icon: string;
+}) {
+  const animated = useCountUp(value);
   return (
-    <div className="glass-card p-5">
+    <div className="glass-card group relative overflow-hidden p-6 transition-all hover:bg-white/[0.05] hover:scale-[1.02]">
+      <span className="absolute -right-2 -top-2 text-5xl opacity-[0.06] transition-opacity group-hover:opacity-[0.12]">
+        {icon}
+      </span>
       <p className="text-sm text-strata-slate-400">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-strata-amber-300">{value}</p>
+      <p className="mt-1 font-mono text-3xl font-bold text-strata-amber-300">
+        {animated.toLocaleString()}
+      </p>
+      <p className="mt-1 text-xs text-strata-slate-500">{subtitle}</p>
     </div>
   );
 }
 
-/** Navigation card linking to a feature page, with a hover highlight. */
-function QuickLink({
+function BentoNavTile({
   to,
   title,
   desc,
@@ -348,16 +400,25 @@ function QuickLink({
   to: string;
   title: string;
   desc: string;
+  accent?: string;
 }) {
   return (
     <Link
       to={to}
-      className="group glass-card p-5 transition-all hover:border-strata-amber-400/20 hover:bg-white/[0.05]"
+      className="glass-card group flex flex-col justify-between p-5 transition-all hover:bg-white/[0.05] hover:scale-[1.02]"
     >
-      <p className="font-medium text-white group-hover:text-strata-amber-300">
-        {title}
-      </p>
-      <p className="mt-1 text-sm text-strata-slate-500">{desc}</p>
+      <div>
+        <p className="font-semibold text-white group-hover:text-strata-amber-300 transition-colors">
+          {title}
+        </p>
+        <p className="mt-1 text-sm text-strata-slate-500">{desc}</p>
+      </div>
+      <div className="mt-4 flex items-center text-xs text-strata-slate-500 group-hover:text-strata-amber-400 transition-colors">
+        <span>Explore</span>
+        <svg className="ml-1 h-3 w-3 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
     </Link>
   );
 }
@@ -372,7 +433,7 @@ function DormantArtistsSection({ artists }: { artists: DormantArtist[] }) {
   const visible = showAll ? artists : artists.slice(0, 5);
 
   return (
-    <div className="mt-8 glass-card p-6">
+    <div className="glass-card p-6">
       <h2 className="text-lg font-semibold text-white">
         眠れるアーティスト
       </h2>
@@ -468,7 +529,7 @@ function DriftReportCard({ drift }: { drift: DriftReport }) {
   const hasPrevData = Number(ps.totalPlays) > 0;
 
   return (
-    <div className="mt-8 glass-card p-6">
+    <div className="glass-card p-6">
       {/* Header */}
       <div className="mb-5">
         <h2 className="text-lg font-semibold text-strata-amber-300">
