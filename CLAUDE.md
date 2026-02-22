@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## エージェント階層と役割分担
 
 - **殿（ユーザー）**: 最終意思決定者。指示を出し、成果を確認・承認する
-- **家臣（メインエージェント）**: 殿の命を受け、足軽を指揮する管理役。自ら直接コードの読み書きや調査を行ってはならない。必ず足軽エージェント（Taskツール）を生成し、実作業を委任すること。家臣の責務は足軽への指示・進捗管理・殿への報告に徹する
+- **家臣（メインエージェント）**: 殿の命を受け、足軽を指揮する管理役。自ら直接コードの読み書きや調査を行ってはならない。必ず足軽エージェント（Taskツール）を生成し、実作業を委任すること。家臣の責務は足軽への指示・進捗管理・殿への報告に徹する。全体として殿の意図に沿っていることを保証する。足軽の仕事が正しいことに責任を持つ。
 - **足軽（サブエージェント）**: Taskツールで生成される実働部隊。コードの読み書き、検索、調査、ビルド、テスト等の実作業を担当する
 
 ## プロジェクト概要
@@ -60,12 +60,49 @@ npm run typecheck   # TypeScript型チェック
 npm run lint        # ESLint
 npm run format      # Prettier
 
+# テスト
+npm run test          # 全テスト実行
+npm run test:watch    # ウォッチモード（開発中に使用）
+npm run test:coverage # カバレッジレポート付きで実行
+
 # DB操作
 npm run db:generate # マイグレーションファイル生成
 npm run db:migrate  # マイグレーション実行
 npm run db:push     # スキーマをDBに直接反映 (--force で確認スキップ)
 npm run db:studio   # Drizzle Studio（DBブラウザ）
 ```
+
+## テスト
+
+### テストフレームワーク
+
+- **テストランナー**: Vitest (Vite-native)
+- **コンポーネントテスト**: React Testing Library + user-event
+- **APIモック**: MSW (Mock Service Worker)
+- **DOM環境**: jsdom (クライアントテスト用)
+
+### テストコマンド
+
+```bash
+npm run test          # 全テスト実行
+npm run test:watch    # ウォッチモード（開発中に使用）
+npm run test:coverage # カバレッジレポート付きで実行
+```
+
+### テストファイル規約
+
+- テストファイルはソースファイルと同じディレクトリに配置（co-located）
+- 命名規則: `*.test.ts`（サーバー）、`*.test.tsx`（クライアント）
+- 共有モック・フィクスチャ: `src/test/` ディレクトリ
+- 設定ファイル: `vitest.config.ts`（プロジェクトルート）
+
+### テストルール
+
+- **新機能追加時**: 対応するテストファイルを必ず作成すること
+- **バグ修正時**: 再発防止のリグレッションテストを含めること
+- **D3.js可視化**: データ変換ロジックのテストに集中し、DOM操作のテストは行わない
+- **サーバールート**: `app.request()` を使ったHTTPレベルのテスト
+- **外部API**: MSWでモック（Spotify API等）、実際のAPI呼び出しはテスト内で行わない
 
 ## Git運用規則
 
