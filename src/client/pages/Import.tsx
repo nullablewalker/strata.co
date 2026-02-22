@@ -25,6 +25,7 @@ export default function Import() {
     imported: 0,
     skipped: 0,
     duplicates: 0,
+    skipReasons: { tooShort: 0, noTrackName: 0, noSpotifyUri: 0, noArtistName: 0 },
   });
   const [dragOver, setDragOver] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -101,6 +102,7 @@ export default function Import() {
         imported: 0,
         skipped: 0,
         duplicates: 0,
+        skipReasons: { tooShort: 0, noTrackName: 0, noSpotifyUri: 0, noArtistName: 0 },
       };
 
       let hasError = false;
@@ -123,6 +125,12 @@ export default function Import() {
           accumulated.imported += res.data.imported;
           accumulated.skipped += res.data.skipped;
           accumulated.duplicates += res.data.duplicates;
+          if (res.data.skipReasons) {
+            accumulated.skipReasons.tooShort += res.data.skipReasons.tooShort;
+            accumulated.skipReasons.noTrackName += res.data.skipReasons.noTrackName;
+            accumulated.skipReasons.noSpotifyUri += res.data.skipReasons.noSpotifyUri;
+            accumulated.skipReasons.noArtistName += res.data.skipReasons.noArtistName;
+          }
         } catch (err) {
           progress[i].status = "error";
           progress[i].error =
@@ -311,11 +319,29 @@ export default function Import() {
                   {f.name}
                 </p>
                 {f.result && (
-                  <p className="mt-0.5 text-xs text-strata-slate-400">
-                    {f.result.imported.toLocaleString()} 件インポート /
-                    {" "}{f.result.skipped.toLocaleString()} 件スキップ /
-                    {" "}{f.result.duplicates.toLocaleString()} 件重複
-                  </p>
+                  <>
+                    <p className="mt-0.5 text-xs text-strata-slate-400">
+                      {f.result.imported.toLocaleString()} 件インポート /
+                      {" "}{f.result.skipped.toLocaleString()} 件スキップ /
+                      {" "}{f.result.duplicates.toLocaleString()} 件重複
+                    </p>
+                    {f.result.skipped > 0 && f.result.skipReasons && (
+                      <div className="mt-1.5 space-y-0.5 text-[11px] text-strata-slate-500">
+                        {f.result.skipReasons.tooShort > 0 && (
+                          <p>・30秒未満の再生: {f.result.skipReasons.tooShort.toLocaleString()}件</p>
+                        )}
+                        {f.result.skipReasons.noTrackName > 0 && (
+                          <p>・トラック名なし: {f.result.skipReasons.noTrackName.toLocaleString()}件</p>
+                        )}
+                        {f.result.skipReasons.noSpotifyUri > 0 && (
+                          <p>・Spotify URI なし: {f.result.skipReasons.noSpotifyUri.toLocaleString()}件</p>
+                        )}
+                        {f.result.skipReasons.noArtistName > 0 && (
+                          <p>・アーティスト名なし: {f.result.skipReasons.noArtistName.toLocaleString()}件</p>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
                 {f.error && (
                   <p className="mt-0.5 text-xs text-red-400">{f.error}</p>
@@ -366,6 +392,22 @@ export default function Import() {
               <p className="text-lg font-medium text-strata-slate-400">
                 {totals.skipped.toLocaleString()}
               </p>
+              {totals.skipped > 0 && totals.skipReasons && (
+                <div className="mt-1.5 space-y-0.5 text-[11px] text-strata-slate-500">
+                  {totals.skipReasons.tooShort > 0 && (
+                    <p>・30秒未満: {totals.skipReasons.tooShort.toLocaleString()}</p>
+                  )}
+                  {totals.skipReasons.noTrackName > 0 && (
+                    <p>・トラック名なし: {totals.skipReasons.noTrackName.toLocaleString()}</p>
+                  )}
+                  {totals.skipReasons.noSpotifyUri > 0 && (
+                    <p>・URI なし: {totals.skipReasons.noSpotifyUri.toLocaleString()}</p>
+                  )}
+                  {totals.skipReasons.noArtistName > 0 && (
+                    <p>・アーティスト名なし: {totals.skipReasons.noArtistName.toLocaleString()}</p>
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <p className="text-strata-slate-400">重複</p>
@@ -374,6 +416,11 @@ export default function Import() {
               </p>
             </div>
           </div>
+          {totals.skipped > 0 && (
+            <p className="mt-3 text-[11px] text-strata-slate-500">
+              ※ 短い再生やメタデータ不完全な記録を自動除外しています
+            </p>
+          )}
           <button
             onClick={() => navigate("/vault")}
             className="mt-5 rounded-lg bg-strata-amber-500 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-strata-amber-400"

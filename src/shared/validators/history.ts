@@ -49,6 +49,18 @@ export const streamingHistorySchema = z.array(streamingHistoryEntrySchema);
 export type StreamingHistoryEntry = z.infer<typeof streamingHistoryEntrySchema>;
 export type StreamingHistory = z.infer<typeof streamingHistorySchema>;
 
+/** Breakdown of why entries were skipped during import. */
+export interface SkipReasons {
+  /** Plays shorter than 30 seconds (likely skips or accidental plays). */
+  tooShort: number;
+  /** Missing track name (podcasts, local files, etc.). */
+  noTrackName: number;
+  /** Missing or invalid Spotify track URI. */
+  noSpotifyUri: number;
+  /** Missing artist name. */
+  noArtistName: number;
+}
+
 /** Summary returned after an import operation completes. */
 export interface ImportResult {
   /** Total entries found in the uploaded JSON. */
@@ -59,6 +71,8 @@ export interface ImportResult {
   skipped: number;
   /** Entries that already existed (deduped by user + track URI + timestamp). */
   duplicates: number;
+  /** Detailed breakdown of skip reasons. */
+  skipReasons: SkipReasons;
 }
 
 /** Returned by GET /api/import/status — lets the client show whether data exists and its time range. */
