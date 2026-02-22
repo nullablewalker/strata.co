@@ -22,6 +22,7 @@ const navItems = [
   { to: "/patterns", label: "Patterns" },
   { to: "/rankings", label: "Rankings" },
   { to: "/era-map", label: "Era Map" },
+  { to: "/autobiography", label: "Autobiography" },
   { to: "/import", label: "Import" },
 ];
 

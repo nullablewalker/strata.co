@@ -23,6 +23,7 @@ import Patterns from "./pages/Patterns";
 import BumpChart from "./pages/BumpChart";
 import EraMap from "./pages/EraMap";
 import Import from "./pages/Import";
+import Autobiography from "./pages/Autobiography";
 
 /**
  * Landing page — the only public route.
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="/rankings" element={<BumpChart />} />
           <Route path="/era-map" element={<EraMap />} />
           <Route path="/import" element={<Import />} />
+          <Route path="/autobiography" element={<Autobiography />} />
         </Route>
       </Routes>
     </AuthProvider>
