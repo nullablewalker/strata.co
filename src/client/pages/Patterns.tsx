@@ -52,6 +52,19 @@ interface OverviewData {
   availableYears: number[];
 }
 
+interface TimeArtistEntry {
+  artistName: string;
+  playCount: number;
+  msPlayed: number;
+}
+
+interface TimeArtistPeriod {
+  label: string;
+  artists: TimeArtistEntry[];
+}
+
+type TimeArtistsData = Record<string, TimeArtistPeriod>;
+
 // --- Chart colors ---
 // Hardcoded hex values (not CSS vars) because D3 operates outside React's
 // style system. These match the Tailwind @theme tokens in index.css.
@@ -538,6 +551,7 @@ export default function Patterns() {
   const [hourly, setHourly] = useState<HourlyData[] | null>(null);
   const [weekly, setWeekly] = useState<WeeklyData[] | null>(null);
   const [monthly, setMonthly] = useState<MonthlyData[] | null>(null);
+  const [timeArtists, setTimeArtists] = useState<TimeArtistsData | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -625,19 +639,28 @@ export default function Patterns() {
     if (selectedAlbum) params.set("album", selectedAlbum);
     const qs = params.toString() ? `?${params.toString()}` : "";
 
+    // time-artists only supports year filter (not artist/album)
+    const timeArtistsParams = new URLSearchParams();
+    if (selectedYear) timeArtistsParams.set("year", selectedYear);
+    const timeArtistsQs = timeArtistsParams.toString()
+      ? `?${timeArtistsParams.toString()}`
+      : "";
+
     try {
-      const [overviewRes, hourlyRes, weeklyRes, monthlyRes] =
+      const [overviewRes, hourlyRes, weeklyRes, monthlyRes, timeArtistsRes] =
         await Promise.all([
           apiFetch<{ data: OverviewData }>(`/patterns/overview${qs}`),
           apiFetch<{ data: HourlyData[] }>(`/patterns/hourly${qs}`),
           apiFetch<{ data: WeeklyData[] }>(`/patterns/weekly${qs}`),
           apiFetch<{ data: MonthlyData[] }>(`/patterns/monthly${qs}`),
+          apiFetch<{ data: TimeArtistsData }>(`/patterns/time-artists${timeArtistsQs}`),
         ]);
 
       setOverview(overviewRes.data);
       setHourly(hourlyRes.data);
       setWeekly(weeklyRes.data);
       setMonthly(monthlyRes.data);
+      setTimeArtists(timeArtistsRes.data);
     } catch {
       setError("データの取得に失敗しました");
     } finally {
@@ -760,8 +783,90 @@ export default function Patterns() {
           <ChartSection title="月別リスニング">
             {monthly && <MonthlyChart data={monthly} />}
           </ChartSection>
+
+          {timeArtists && <TimeArtistsSection data={timeArtists} />}
         </div>
       )}
+    </div>
+  );
+}
+
+// --- Time-of-Day Artists Section ---
+// Shows top 5 artists for each of four time periods (night, morning,
+// daytime, evening) in a grid of cards with Japanese labels.
+
+/** Metadata for rendering each time period card. */
+const TIME_PERIOD_META: Record<
+  string,
+  { icon: string; timeRange: string; order: number }
+> = {
+  night: { icon: "\u{1F319}", timeRange: "22:00 - 3:59", order: 0 },
+  morning: { icon: "\u{1F305}", timeRange: "4:00 - 9:59", order: 1 },
+  daytime: { icon: "\u{2600}\u{FE0F}", timeRange: "10:00 - 17:59", order: 2 },
+  evening: { icon: "\u{1F307}", timeRange: "18:00 - 21:59", order: 3 },
+};
+
+function TimeArtistsSection({ data }: { data: TimeArtistsData }) {
+  const periods = Object.entries(data).sort(
+    ([a], [b]) =>
+      (TIME_PERIOD_META[a]?.order ?? 0) - (TIME_PERIOD_META[b]?.order ?? 0),
+  );
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-white">
+          時間帯の音楽
+        </h2>
+        <p className="text-sm text-strata-slate-500">Time of Day Report</p>
+      </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {periods.map(([key, period]) => {
+          const meta = TIME_PERIOD_META[key];
+          return (
+            <div
+              key={key}
+              className="rounded-lg border border-strata-border bg-strata-bg p-4"
+            >
+              <div className="mb-3">
+                <p className="text-sm font-semibold text-white">
+                  {meta?.icon} {period.label}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {meta?.timeRange}
+                </p>
+              </div>
+              {period.artists.length === 0 ? (
+                <p className="text-xs text-zinc-500">データなし</p>
+              ) : (
+                <ol className="space-y-1.5">
+                  {period.artists.map((artist, i) => (
+                    <li key={artist.artistName} className="flex items-baseline gap-2">
+                      <span
+                        className={`text-xs font-mono w-4 text-right shrink-0 ${
+                          i === 0 ? "text-amber-300" : "text-zinc-500"
+                        }`}
+                      >
+                        {i + 1}
+                      </span>
+                      <span
+                        className={`text-sm truncate ${
+                          i === 0 ? "text-amber-300 font-medium" : "text-zinc-300"
+                        }`}
+                      >
+                        {artist.artistName}
+                      </span>
+                      <span className="ml-auto text-xs text-zinc-500 shrink-0">
+                        {artist.playCount.toLocaleString()}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
