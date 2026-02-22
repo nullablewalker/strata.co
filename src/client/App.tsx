@@ -7,6 +7,7 @@
  *   /vault      → The Vault   │ All wrapped in ProtectedRoute + Layout
  *   /heatmap    → Heatmap     │ (requires Spotify auth, renders sidebar shell)
  *   /patterns   → Patterns    │
+ *   /era-map    → Era Map     │
  *   /import     → Import      ┘
  *
  * AuthProvider sits at the top so every descendant can call useAuth().
@@ -20,6 +21,7 @@ import Vault from "./pages/Vault";
 import Heatmap from "./pages/Heatmap";
 import Patterns from "./pages/Patterns";
 import BumpChart from "./pages/BumpChart";
+import EraMap from "./pages/EraMap";
 import Import from "./pages/Import";
 
 /**
@@ -83,6 +85,7 @@ export default function App() {
           <Route path="/heatmap" element={<Heatmap />} />
           <Route path="/patterns" element={<Patterns />} />
           <Route path="/rankings" element={<BumpChart />} />
+          <Route path="/era-map" element={<EraMap />} />
           <Route path="/import" element={<Import />} />
         </Route>
       </Routes>
