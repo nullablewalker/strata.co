@@ -30,6 +30,22 @@ function BrowserColumn({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Arrow key navigation
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const allItems: (string | null)[] = [null, ...items];
+        const currentIndex = allItems.indexOf(selected);
+        const nextIndex =
+          e.key === "ArrowDown"
+            ? Math.min(currentIndex + 1, allItems.length - 1)
+            : Math.max(currentIndex - 1, 0);
+        onSelect(allItems[nextIndex]);
+        // Scroll the item into view
+        const buttons = listRef.current?.querySelectorAll("button");
+        buttons?.[nextIndex]?.scrollIntoView({ block: "nearest" });
+        return;
+      }
+
       // Type-to-jump: find first item starting with typed letter
       if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) {
         const char = e.key.toLowerCase();
@@ -45,7 +61,7 @@ function BrowserColumn({
         }
       }
     },
-    [items, onSelect],
+    [items, selected, onSelect],
   );
 
   return (
@@ -63,6 +79,8 @@ function BrowserColumn({
         className="bg-white/[0.02] max-h-[200px] overflow-y-auto"
         tabIndex={0}
         onKeyDown={handleKeyDown}
+        role="listbox"
+        aria-label={title}
       >
         {loading ? (
           <div className="space-y-1 p-2">
@@ -75,6 +93,8 @@ function BrowserColumn({
             {/* "All" option */}
             <button
               onClick={() => onSelect(null)}
+              role="option"
+              aria-selected={selected === null}
               className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
                 selected === null
                   ? "bg-strata-amber-500/20 text-strata-amber-300 font-medium"
@@ -88,6 +108,8 @@ function BrowserColumn({
               <button
                 key={item}
                 onClick={() => onSelect(item)}
+                role="option"
+                aria-selected={selected === item}
                 className={`w-full truncate px-3 py-1.5 text-left text-sm transition-colors ${
                   selected === item
                     ? "bg-strata-amber-500/20 text-strata-amber-300 font-medium"

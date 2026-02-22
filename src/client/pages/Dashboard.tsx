@@ -173,11 +173,11 @@ export default function Dashboard() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <h1 className="text-2xl font-bold">
+      <h1 className="text-2xl font-bold text-white">
         Welcome back
         {user?.displayName ? `, ${user.displayName}` : ""}
       </h1>
-      <p className="mt-1 text-strata-slate-400">
+      <p className="mt-1 text-sm text-strata-slate-400">
         Your personal music archive
       </p>
 
@@ -271,7 +271,7 @@ export default function Dashboard() {
       ) : (
         /* Import CTA */
         <div className="mt-8 glass-card p-8 text-center">
-          <h2 className="text-lg font-semibold text-strata-amber-300">
+          <h2 className="text-lg font-semibold text-white">
             Get Started
           </h2>
           <p className="mt-2 text-strata-slate-400">
@@ -659,7 +659,7 @@ function DriftStat({
   return (
     <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2.5">
       <p className="text-xs text-strata-slate-500">{label}</p>
-      <p className="mt-0.5 text-lg font-bold text-white">
+      <p className="mt-0.5 font-mono text-lg font-bold text-white">
         {displayValue ?? current.toLocaleString()}
       </p>
       <ChangeIndicator

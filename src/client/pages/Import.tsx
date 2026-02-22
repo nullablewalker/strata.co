@@ -179,10 +179,10 @@ export default function Import() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="text-3xl font-bold text-strata-amber-300">
+      <h1 className="text-2xl font-bold text-white">
         データインポート
       </h1>
-      <p className="mt-2 text-strata-slate-400">
+      <p className="mt-1 text-sm text-strata-slate-400">
         Spotifyの再生履歴データをStrataに取り込みます
       </p>
 

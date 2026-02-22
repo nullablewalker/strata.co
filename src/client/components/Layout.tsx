@@ -87,6 +87,8 @@ export default function Layout() {
         <div
           className="fixed inset-0 z-20 bg-black/50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
+          role="button"
+          aria-label="メニューを閉じる"
         />
       )}
 
@@ -108,7 +110,7 @@ export default function Layout() {
 
         {/* Primary navigation — NavLink provides automatic "isActive" styling
             so the current page is visually highlighted in amber. */}
-        <nav className="flex-1 overflow-y-auto px-3 py-2">
+        <nav aria-label="メインナビゲーション" className="flex-1 overflow-y-auto px-3 py-2">
           {navGroups.map((group, gi) => (
             <div key={gi} className={gi > 0 ? "mt-5" : ""}>
               {group.label && (
@@ -176,6 +178,7 @@ export default function Layout() {
         <header className="flex h-14 items-center border-b border-white/[0.06] bg-strata-bg/80 backdrop-blur-xl px-4 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
+            aria-label="メニューを開く"
             className="text-strata-slate-400 hover:text-white transition-all active:scale-[0.9]"
           >
             <svg

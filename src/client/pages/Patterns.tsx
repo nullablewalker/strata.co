@@ -88,7 +88,7 @@ function OverviewCards({ data }: { data: OverviewData }) {
   return (
     <div className="space-y-6">
       {/* Listener type - large badge */}
-      <div className="flex items-center justify-center glass-card p-8">
+      <div className="flex items-center justify-center glass-card p-6">
         <span className="text-4xl font-bold text-strata-amber-300">
           {data.listenerType}
         </span>
@@ -128,7 +128,7 @@ function StatCard({
   return (
     <div className="glass-card p-4">
       <p className="text-xs text-strata-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-strata-amber-300">{value}</p>
+      <p className="mt-1 font-mono text-2xl font-bold text-strata-amber-300">{value}</p>
       {sub && (
         <p className="mt-0.5 text-xs text-strata-slate-400">{sub}</p>
       )}
@@ -682,7 +682,7 @@ export default function Patterns() {
       {/* Header + Year Filter */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Listening Patterns</h1>
+          <h1 className="text-2xl font-bold text-white">Listening Patterns</h1>
           <p className="mt-1 text-sm text-strata-slate-400">
             あなたのリスニング傾向を時間軸で分析
           </p>
@@ -881,7 +881,7 @@ function ChartSection({
 }) {
   return (
     <div className="glass-card p-6">
-      <h2 className="mb-4 text-lg font-semibold text-strata-slate-400">
+      <h2 className="mb-4 text-lg font-semibold text-white">
         {title}
       </h2>
       {children}

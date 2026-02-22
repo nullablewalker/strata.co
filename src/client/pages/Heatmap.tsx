@@ -351,7 +351,7 @@ export default function Heatmap() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Fandom Heatmap</h1>
+        <h1 className="text-2xl font-bold text-white">Fandom Heatmap</h1>
         <p className="mt-1 text-sm text-strata-slate-400">
           Your listening intensity, layered across time
         </p>
@@ -561,7 +561,7 @@ export default function Heatmap() {
       {/* Silence Map — periods of 3+ consecutive days with no plays */}
       {!loading && !error && !artist && silenceData && (
         <div className="glass-card p-5">
-          <h2 className="text-lg font-semibold text-zinc-300">
+          <h2 className="text-lg font-semibold text-white">
             沈黙の記録
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
@@ -592,7 +592,7 @@ export default function Heatmap() {
       {artist && obsessionData && obsessionData.months.length > 0 && (
         <div className="glass-card p-4">
           <div className="mb-3">
-            <h2 className="text-lg font-semibold">Obsession Curve</h2>
+            <h2 className="text-lg font-semibold text-white">Obsession Curve</h2>
             <p className="text-sm text-amber-300">{obsessionData.artist}</p>
           </div>
           <ObsessionCurve data={obsessionData} />
@@ -848,9 +848,9 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="glass-card p-3">
+    <div className="glass-card p-4">
       <p className="text-xs text-strata-slate-400">{label}</p>
-      <p className="mt-1 text-xl font-bold text-strata-amber-300">{value}</p>
+      <p className="mt-1 font-mono text-xl font-bold text-strata-amber-300">{value}</p>
       {sub && <p className="text-xs text-strata-slate-500">{sub}</p>}
     </div>
   );
