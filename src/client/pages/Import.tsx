@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../lib/api";
+import ConfirmDialog from "../components/ConfirmDialog";
 import type { ImportResult, ImportStatus } from "../../shared/validators/history";
 
 type UploadState = "idle" | "uploading" | "done" | "error";
@@ -25,12 +26,19 @@ export default function Import() {
     duplicates: 0,
   });
   const [dragOver, setDragOver] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteState, setDeleteState] = useState<"idle" | "deleting" | "done" | "error">("idle");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchStatus = useCallback(() => {
     apiFetch<{ data: ImportStatus }>("/import/status")
       .then((res) => setStatus(res.data))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetchStatus();
+  }, [fetchStatus]);
 
   const processFiles = useCallback(
     async (fileList: FileList | File[]) => {
@@ -87,9 +95,7 @@ export default function Import() {
       setUploadState(hasError ? "error" : "done");
 
       // Refresh status
-      apiFetch<{ data: ImportStatus }>("/import/status")
-        .then((res) => setStatus(res.data))
-        .catch(() => {});
+      fetchStatus();
     },
     [],
   );
@@ -114,6 +120,21 @@ export default function Import() {
     [processFiles],
   );
 
+  const handleDelete = async () => {
+    setDeleteState("deleting");
+    setDeleteError(null);
+    try {
+      await apiFetch("/import/data", { method: "DELETE" });
+      setDeleteState("done");
+      setDeleteDialogOpen(false);
+      // Re-fetch import status to update UI
+      fetchStatus();
+    } catch (err) {
+      setDeleteState("error");
+      setDeleteError(err instanceof Error ? err.message : "データの削除に失敗しました");
+    }
+  };
+
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
       <h1 className="text-3xl font-bold text-strata-amber-300">
@@ -137,6 +158,17 @@ export default function Import() {
               {new Date(status.dateRange.to).toLocaleDateString("ja-JP")}
             </p>
           )}
+          <div className="mt-3">
+            <button
+              onClick={() => { setDeleteDialogOpen(true); setDeleteState("idle"); setDeleteError(null); }}
+              className="text-sm text-red-400 hover:text-red-300 underline underline-offset-2"
+            >
+              インポートデータをすべて削除
+            </button>
+            {deleteError && (
+              <p className="text-sm text-red-400 mt-2">{deleteError}</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -316,6 +348,16 @@ export default function Import() {
           </p>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="インポートデータの削除"
+        description={"すべての再生履歴データが完全に削除されます。\nこの操作は取り消せません。"}
+        confirmLabel="すべて削除する"
+        loading={deleteState === "deleting"}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteDialogOpen(false)}
+      />
     </div>
   );
 }
