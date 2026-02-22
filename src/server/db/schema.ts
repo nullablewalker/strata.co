@@ -4,7 +4,7 @@
  * files, or `npm run db:push` to apply directly during development.
  */
 
-import { index, integer, pgTable, serial, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, serial, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /**
  * Application users, identified by their Spotify account.
@@ -51,6 +51,16 @@ export const listeningHistory = pgTable(
     // Provenance: "import" for Extended Streaming History, future values like
     // "scrobble" for real-time tracking
     source: text("source").notNull().default("import"),
+    // Why playback started (e.g., trackdone, clickrow, fwdbtn)
+    reasonStart: text("reason_start"),
+    // Why playback ended (e.g., trackdone, endplay, fwdbtn)
+    reasonEnd: text("reason_end"),
+    // Whether user explicitly skipped
+    skipped: boolean("skipped"),
+    // Client platform (ios, osx, android, etc.)
+    platform: text("platform"),
+    // Whether shuffle mode was on
+    shuffle: boolean("shuffle"),
   },
   (table) => [
     // Filter by user — nearly every query is scoped to a single user

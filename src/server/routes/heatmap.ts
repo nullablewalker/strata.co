@@ -210,6 +210,27 @@ heatmapRoutes.get("/summary", async (c) => {
   // Round to 1 decimal place for display
   const averageDailyPlays = Math.round((totalPlays / daysInPeriod) * 10) / 10;
 
+  // Engagement metrics: completion rate and active selection rate.
+  // These use FILTER (WHERE ...) to count specific reason_end / reason_start values
+  // relative to rows where the column is non-null (avoids skewing by old data without reasons).
+  const engagementResult = await db
+    .select({
+      completedPlays: sql<number>`count(*) FILTER (WHERE ${listeningHistory.reasonEnd} = 'trackdone')`.mapWith(Number),
+      totalWithReasonEnd: sql<number>`count(*) FILTER (WHERE ${listeningHistory.reasonEnd} IS NOT NULL)`.mapWith(Number),
+      activeSelections: sql<number>`count(*) FILTER (WHERE ${listeningHistory.reasonStart} = 'clickrow')`.mapWith(Number),
+      totalWithReasonStart: sql<number>`count(*) FILTER (WHERE ${listeningHistory.reasonStart} IS NOT NULL)`.mapWith(Number),
+    })
+    .from(listeningHistory)
+    .where(and(...conditions));
+
+  const completionRate = engagementResult[0].totalWithReasonEnd > 0
+    ? Math.round((engagementResult[0].completedPlays / engagementResult[0].totalWithReasonEnd) * 100)
+    : null;
+
+  const activeSelectionRate = engagementResult[0].totalWithReasonStart > 0
+    ? Math.round((engagementResult[0].activeSelections / engagementResult[0].totalWithReasonStart) * 100)
+    : null;
+
   return c.json({
     data: {
       totalPlays,
@@ -217,6 +238,8 @@ heatmapRoutes.get("/summary", async (c) => {
       longestStreak,
       mostActiveDay,
       averageDailyPlays,
+      completionRate,
+      activeSelectionRate,
     },
   });
 });

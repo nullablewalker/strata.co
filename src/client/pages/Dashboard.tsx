@@ -105,6 +105,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [capsules, setCapsules] = useState<TimeCapsuleYear[]>([]);
   const [dormantArtists, setDormantArtists] = useState<DormantArtist[]>([]);
+  const [engagement, setEngagement] = useState<{ completionRate: number | null; activeSelectionRate: number | null }>({ completionRate: null, activeSelectionRate: null });
 
   // Fetch vault stats on mount to determine whether the user has any data.
   // If the request fails (e.g. no history yet), we treat it as "no data"
@@ -152,6 +153,19 @@ export default function Dashboard() {
       })
       .catch(() => {
         // Silently ignore — capsule is optional
+      });
+
+    // Fetch engagement metrics from heatmap summary (independent)
+    apiFetch<ApiResponse<{ completionRate: number | null; activeSelectionRate: number | null }>>("/heatmap/summary", { signal: controller.signal })
+      .then((res) => {
+        if (ignore) return;
+        setEngagement({
+          completionRate: res.data.completionRate ?? null,
+          activeSelectionRate: res.data.activeSelectionRate ?? null,
+        });
+      })
+      .catch(() => {
+        // Silently ignore — engagement metrics are optional
       });
 
     return () => {
@@ -248,6 +262,24 @@ export default function Dashboard() {
             subtitle="時間の音楽体験"
             icon="⏱"
           />
+          {engagement.completionRate !== null && (
+            <BentoStatTile
+              label="Completion"
+              value={engagement.completionRate}
+              subtitle="完走率"
+              icon="✓"
+              suffix="%"
+            />
+          )}
+          {engagement.activeSelectionRate !== null && (
+            <BentoStatTile
+              label="Active Picks"
+              value={engagement.activeSelectionRate}
+              subtitle="能動的選曲率"
+              icon="☞"
+              suffix="%"
+            />
+          )}
 
           {/* Quick links — styled as bento navigation tiles */}
           <BentoNavTile to="/vault" title="The Vault" desc="Browse your full library" accent="amber" />
@@ -378,11 +410,13 @@ function BentoStatTile({
   value,
   subtitle,
   icon,
+  suffix,
 }: {
   label: string;
   value: number;
   subtitle: string;
   icon: string;
+  suffix?: string;
 }) {
   const animated = useCountUp(value);
   return (
@@ -392,7 +426,7 @@ function BentoStatTile({
       </span>
       <p className="text-sm text-strata-slate-400">{label}</p>
       <p className="mt-1 font-mono text-3xl font-bold text-strata-amber-300 amber-glow">
-        {animated.toLocaleString()}
+        {animated.toLocaleString()}{suffix}
       </p>
       <p className="mt-1 text-xs text-strata-slate-500">{subtitle}</p>
     </div>

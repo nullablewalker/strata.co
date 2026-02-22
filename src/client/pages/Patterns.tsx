@@ -65,6 +65,28 @@ interface TimeArtistPeriod {
 
 type TimeArtistsData = Record<string, TimeArtistPeriod>;
 
+interface DeviceData {
+  platform: string;
+  playCount: number;
+  totalMs: string;
+}
+
+interface ShuffleData {
+  shufflePlays: number;
+  intentionalPlays: number;
+  total: number;
+}
+
+// Device platform display names
+const PLATFORM_LABELS: Record<string, string> = {
+  ios: "iPhone",
+  osx: "Mac",
+  android: "Android",
+  web_player: "Web",
+  windows: "Windows",
+  unknown: "その他",
+};
+
 // --- Chart colors ---
 // Hardcoded hex values (not CSS vars) because D3 operates outside React's
 // style system. These match the Tailwind @theme tokens in index.css.
@@ -552,6 +574,8 @@ export default function Patterns() {
   const [weekly, setWeekly] = useState<WeeklyData[] | null>(null);
   const [monthly, setMonthly] = useState<MonthlyData[] | null>(null);
   const [timeArtists, setTimeArtists] = useState<TimeArtistsData | null>(null);
+  const [devices, setDevices] = useState<DeviceData[] | null>(null);
+  const [shuffle, setShuffle] = useState<ShuffleData | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -646,14 +670,23 @@ export default function Patterns() {
       ? `?${timeArtistsParams.toString()}`
       : "";
 
+    // devices and shuffle only support year filter (not artist/album)
+    const yearOnlyParams = new URLSearchParams();
+    if (selectedYear) yearOnlyParams.set("year", selectedYear);
+    const yearOnlyQs = yearOnlyParams.toString()
+      ? `?${yearOnlyParams.toString()}`
+      : "";
+
     try {
-      const [overviewRes, hourlyRes, weeklyRes, monthlyRes, timeArtistsRes] =
+      const [overviewRes, hourlyRes, weeklyRes, monthlyRes, timeArtistsRes, devicesRes, shuffleRes] =
         await Promise.all([
           apiFetch<{ data: OverviewData }>(`/patterns/overview${qs}`),
           apiFetch<{ data: HourlyData[] }>(`/patterns/hourly${qs}`),
           apiFetch<{ data: WeeklyData[] }>(`/patterns/weekly${qs}`),
           apiFetch<{ data: MonthlyData[] }>(`/patterns/monthly${qs}`),
           apiFetch<{ data: TimeArtistsData }>(`/patterns/time-artists${timeArtistsQs}`),
+          apiFetch<{ data: DeviceData[] }>(`/patterns/devices${yearOnlyQs}`),
+          apiFetch<{ data: ShuffleData }>(`/patterns/shuffle${yearOnlyQs}`),
         ]);
 
       setOverview(overviewRes.data);
@@ -661,6 +694,8 @@ export default function Patterns() {
       setWeekly(weeklyRes.data);
       setMonthly(monthlyRes.data);
       setTimeArtists(timeArtistsRes.data);
+      setDevices(devicesRes.data);
+      setShuffle(shuffleRes.data);
     } catch {
       setError("データの取得に失敗しました");
     } finally {
@@ -785,6 +820,16 @@ export default function Patterns() {
           </ChartSection>
 
           {timeArtists && <TimeArtistsSection data={timeArtists} />}
+
+          {/* Device breakdown + Shuffle ratio */}
+          <div className="grid gap-8 lg:grid-cols-2">
+            {devices && devices.length > 0 && (
+              <DevicesSection data={devices} />
+            )}
+            {shuffle && shuffle.total > 0 && (
+              <ShuffleSection data={shuffle} />
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -866,6 +911,97 @@ function TimeArtistsSection({ data }: { data: TimeArtistsData }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// --- Device Breakdown Section ---
+// Horizontal percentage bars showing play distribution across platforms.
+
+function DevicesSection({ data }: { data: DeviceData[] }) {
+  const totalPlays = data.reduce((sum, d) => sum + d.playCount, 0);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-white">
+          デバイス別リスニング
+        </h2>
+        <p className="mt-1 text-sm text-strata-slate-400">
+          Listening by device
+        </p>
+      </div>
+      <div className="space-y-3">
+        {data.map((device) => {
+          const percentage =
+            totalPlays > 0
+              ? Math.round((device.playCount / totalPlays) * 1000) / 10
+              : 0;
+          return (
+            <div key={device.platform} className="glass-card p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-white">
+                  {PLATFORM_LABELS[device.platform] ?? device.platform}
+                </span>
+                <span className="text-xs text-strata-slate-400">
+                  {percentage}%
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 rounded-full bg-white/[0.05]">
+                <div
+                  className="h-full rounded-full bg-strata-amber-400/60"
+                  style={{ width: `${percentage}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// --- Shuffle Ratio Section ---
+// Two side-by-side stat cards showing shuffle vs intentional play percentages.
+
+function ShuffleSection({ data }: { data: ShuffleData }) {
+  const shufflePercent =
+    data.total > 0
+      ? Math.round((data.shufflePlays / data.total) * 1000) / 10
+      : 0;
+  const intentionalPercent =
+    data.total > 0
+      ? Math.round((data.intentionalPlays / data.total) * 1000) / 10
+      : 0;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-white">
+          シャッフル vs 意図的再生
+        </h2>
+        <p className="mt-1 text-sm text-strata-slate-400">
+          Shuffle vs intentional plays
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="glass-card p-5 text-center">
+          <p className="text-3xl font-bold text-strata-amber-300">
+            {shufflePercent}%
+          </p>
+          <p className="mt-1 text-sm text-strata-slate-400">
+            シャッフル再生
+          </p>
+        </div>
+        <div className="glass-card p-5 text-center">
+          <p className="text-3xl font-bold text-strata-green-400">
+            {intentionalPercent}%
+          </p>
+          <p className="mt-1 text-sm text-strata-slate-400">
+            意図的再生
+          </p>
+        </div>
       </div>
     </div>
   );

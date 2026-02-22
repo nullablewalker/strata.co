@@ -41,6 +41,12 @@ export const streamingHistoryEntrySchema = z.object({
   skipped: z.boolean().nullable().optional(),
   /** Client platform string (e.g., "Android", "iOS", "web_player"). */
   platform: z.string().nullable().optional(),
+  /** Whether shuffle mode was on during playback. */
+  shuffle: z.boolean().nullable().optional(),
+  /** Whether the stream was played while offline (for future use). */
+  offline: z.boolean().nullable().optional(),
+  /** Country code of the connection at stream time (for future use). */
+  conn_country: z.string().nullable().optional(),
 });
 
 /** The top-level export file is a JSON array of history entries. */
