@@ -3,8 +3,8 @@
  *
  * Adapts its content based on whether the user has imported any listening data:
  *   - With data: shows Time Capsule (tracks from this day in past years),
- *     summary stats (tracks, artists, hours) and quick-nav cards linking to
- *     Vault, Heatmap, and Patterns.
+ *     summary stats (tracks, artists, hours), quick-nav cards linking to
+ *     Vault, Heatmap, and Patterns, Dormant Artists, and the Drift Report.
  *   - Without data: shows a single call-to-action pointing to the Import page
  *     so new users have a clear next step.
  */
@@ -42,9 +42,41 @@ interface DormantArtist {
   lastPlayed: string;
 }
 
+interface DriftArtist {
+  artistName: string;
+  playCount: number;
+  msPlayed: number;
+}
+
+interface DriftMonthStats {
+  totalPlays: number;
+  totalMs: number;
+  uniqueArtists: number;
+  uniqueTracks: number;
+}
+
+interface DriftReport {
+  currentMonth: string;
+  prevMonth: string;
+  current: { artists: DriftArtist[]; stats: DriftMonthStats };
+  previous: { artists: DriftArtist[]; stats: DriftMonthStats };
+  rising: DriftArtist[];
+  fading: DriftArtist[];
+}
+
+/**
+ * Format a YYYY-MM string into Japanese locale month display.
+ * e.g. "2026-02" -> "2026年2月"
+ */
+function formatMonthJa(ym: string): string {
+  const [year, month] = ym.split("-");
+  return `${year}年${Number(month)}月`;
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState<VaultStats | null>(null);
+  const [drift, setDrift] = useState<DriftReport | null>(null);
   // null = unknown (loading), true/false = resolved.
   // This three-state approach prevents flashing the wrong UI during fetch.
   const [hasHistory, setHasHistory] = useState<boolean | null>(null);
@@ -84,6 +116,17 @@ export default function Dashboard() {
         // Silently ignore — capsule is optional
       });
   }, []);
+
+  // Fetch drift report only when we know the user has data
+  useEffect(() => {
+    if (hasHistory) {
+      apiFetch<ApiResponse<DriftReport>>("/vault/drift-report")
+        .then((res) => setDrift(res.data))
+        .catch(() => {
+          // Non-critical — silently ignore drift report failures
+        });
+    }
+  }, [hasHistory]);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -125,6 +168,9 @@ export default function Dashboard() {
           {dormantArtists.length > 0 && (
             <DormantArtistsSection artists={dormantArtists} />
           )}
+
+          {/* Drift Report */}
+          {drift && <DriftReportCard drift={drift} />}
         </>
       ) : (
         /* Import CTA */
@@ -306,6 +352,196 @@ function DormantArtistsSection({ artists }: { artists: DormantArtist[] }) {
           {showAll ? "折りたたむ" : "すべて表示"}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Inline change indicator showing an up/down arrow with the delta value.
+ * Positive changes render in green, negative in red, zero in muted grey.
+ */
+function ChangeIndicator({
+  current,
+  previous,
+  formatter,
+}: {
+  current: number;
+  previous: number;
+  formatter?: (v: number) => string;
+}) {
+  const diff = current - previous;
+  const fmt = formatter ?? ((v: number) => Math.abs(v).toLocaleString());
+
+  if (diff === 0 || (previous === 0 && current === 0)) {
+    return <span className="text-xs text-zinc-500">--</span>;
+  }
+
+  if (diff > 0) {
+    return (
+      <span className="text-xs text-green-400">
+        {"▲ "}{fmt(diff)}
+      </span>
+    );
+  }
+
+  return (
+    <span className="text-xs text-red-400">
+      {"▼ "}{fmt(diff)}
+    </span>
+  );
+}
+
+/**
+ * Drift Report card — monthly narrative showing how the user's musical
+ * gravity shifted between the previous and current month.
+ */
+function DriftReportCard({ drift }: { drift: DriftReport }) {
+  const { current, previous, rising, fading, currentMonth, prevMonth } = drift;
+  const cs = current.stats;
+  const ps = previous.stats;
+
+  const hasCurrentData = Number(cs.totalPlays) > 0;
+  const hasPrevData = Number(ps.totalPlays) > 0;
+
+  return (
+    <div className="mt-8 rounded-lg border border-strata-border bg-strata-surface p-6">
+      {/* Header */}
+      <div className="mb-5">
+        <h2 className="text-lg font-semibold text-strata-amber-300">
+          今月のドリフト
+        </h2>
+        <p className="mt-0.5 text-sm text-strata-slate-500">
+          {formatMonthJa(prevMonth)} → {formatMonthJa(currentMonth)}
+        </p>
+      </div>
+
+      {!hasCurrentData && !hasPrevData ? (
+        <p className="text-sm text-strata-slate-500">
+          直近2ヶ月のデータがまだありません。再生履歴がたまるとドリフトレポートが表示されます。
+        </p>
+      ) : !hasCurrentData ? (
+        <p className="text-sm text-strata-slate-500">
+          今月の再生データがまだありません。音楽を聴くとレポートが更新されます。
+        </p>
+      ) : (
+        <>
+          {/* Stats comparison grid */}
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <DriftStat
+              label="再生回数"
+              current={Number(cs.totalPlays)}
+              previous={Number(ps.totalPlays)}
+            />
+            <DriftStat
+              label="時間"
+              current={Number(cs.totalMs)}
+              previous={Number(ps.totalMs)}
+              formatter={(v) =>
+                `${Math.abs(Math.floor(v / 3_600_000))}h`
+              }
+              displayValue={`${Math.floor(Number(cs.totalMs) / 3_600_000)}h`}
+            />
+            <DriftStat
+              label="アーティスト数"
+              current={Number(cs.uniqueArtists)}
+              previous={Number(ps.uniqueArtists)}
+            />
+            <DriftStat
+              label="楽曲数"
+              current={Number(cs.uniqueTracks)}
+              previous={Number(ps.uniqueTracks)}
+            />
+          </div>
+
+          {/* Rising & Fading artists */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Rising */}
+            <div>
+              <h3 className="mb-2 text-sm font-medium text-strata-amber-300">
+                浮上中
+              </h3>
+              {rising.length === 0 ? (
+                <p className="text-xs text-strata-slate-500">
+                  新たに浮上したアーティストはありません
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {rising.map((a) => (
+                    <li
+                      key={a.artistName}
+                      className="flex items-center justify-between rounded bg-amber-950/20 px-3 py-1.5"
+                    >
+                      <span className="text-sm text-white">
+                        {a.artistName}
+                      </span>
+                      <span className="text-xs text-strata-amber-300">
+                        {Number(a.playCount)} plays
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Fading */}
+            <div>
+              <h3 className="mb-2 text-sm font-medium text-zinc-400">
+                沈降中
+              </h3>
+              {fading.length === 0 ? (
+                <p className="text-xs text-strata-slate-500">
+                  沈降したアーティストはありません
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {fading.map((a) => (
+                    <li
+                      key={a.artistName}
+                      className="flex items-center justify-between rounded bg-zinc-800/30 px-3 py-1.5"
+                    >
+                      <span className="text-sm text-zinc-400">
+                        {a.artistName}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {Number(a.playCount)} plays
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A single stat cell inside the Drift Report comparison grid. */
+function DriftStat({
+  label,
+  current,
+  previous,
+  formatter,
+  displayValue,
+}: {
+  label: string;
+  current: number;
+  previous: number;
+  formatter?: (v: number) => string;
+  displayValue?: string;
+}) {
+  return (
+    <div className="rounded border border-strata-border bg-strata-bg/50 px-3 py-2.5">
+      <p className="text-xs text-strata-slate-500">{label}</p>
+      <p className="mt-0.5 text-lg font-bold text-white">
+        {displayValue ?? current.toLocaleString()}
+      </p>
+      <ChangeIndicator
+        current={current}
+        previous={previous}
+        formatter={formatter}
+      />
     </div>
   );
 }

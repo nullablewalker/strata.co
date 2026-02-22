@@ -592,4 +592,118 @@ vault.get("/dormant-artists", async (c) => {
   return c.json({ data: artists });
 });
 
+// --- Drift Report ---
+
+/**
+ * GET /drift-report — Monthly drift report comparing current month vs previous month.
+ *
+ * Computes top artists, total stats, and identifies "rising" and "fading" artists
+ * to show how the user's musical gravity shifted month-over-month.
+ */
+vault.get("/drift-report", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const db = createDb(c.env.DATABASE_URL);
+  const lh = listeningHistory;
+
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+
+  // Get top artists for current month
+  const currentArtists = await db
+    .select({
+      artistName: lh.artistName,
+      playCount: sql<number>`count(*)`.as("playCount"),
+      msPlayed: sql<number>`sum(${lh.msPlayed})`.as("msPlayed"),
+    })
+    .from(lh)
+    .where(
+      and(
+        eq(lh.userId, userId),
+        sql`to_char(${lh.playedAt}, 'YYYY-MM') = ${currentMonth}`,
+      ),
+    )
+    .groupBy(lh.artistName)
+    .orderBy(sql`count(*) desc`)
+    .limit(10);
+
+  // Get top artists for previous month
+  const prevArtists = await db
+    .select({
+      artistName: lh.artistName,
+      playCount: sql<number>`count(*)`.as("playCount"),
+      msPlayed: sql<number>`sum(${lh.msPlayed})`.as("msPlayed"),
+    })
+    .from(lh)
+    .where(
+      and(
+        eq(lh.userId, userId),
+        sql`to_char(${lh.playedAt}, 'YYYY-MM') = ${prevMonth}`,
+      ),
+    )
+    .groupBy(lh.artistName)
+    .orderBy(sql`count(*) desc`)
+    .limit(10);
+
+  // Get total stats for current month
+  const [currentStats] = await db
+    .select({
+      totalPlays: sql<number>`count(*)`.as("totalPlays"),
+      totalMs: sql<number>`sum(${lh.msPlayed})`.as("totalMs"),
+      uniqueArtists: sql<number>`count(distinct ${lh.artistName})`.as("uniqueArtists"),
+      uniqueTracks: sql<number>`count(distinct ${lh.trackSpotifyId})`.as("uniqueTracks"),
+    })
+    .from(lh)
+    .where(
+      and(
+        eq(lh.userId, userId),
+        sql`to_char(${lh.playedAt}, 'YYYY-MM') = ${currentMonth}`,
+      ),
+    );
+
+  // Get total stats for previous month
+  const [prevStats] = await db
+    .select({
+      totalPlays: sql<number>`count(*)`.as("totalPlays"),
+      totalMs: sql<number>`sum(${lh.msPlayed})`.as("totalMs"),
+      uniqueArtists: sql<number>`count(distinct ${lh.artistName})`.as("uniqueArtists"),
+      uniqueTracks: sql<number>`count(distinct ${lh.trackSpotifyId})`.as("uniqueTracks"),
+    })
+    .from(lh)
+    .where(
+      and(
+        eq(lh.userId, userId),
+        sql`to_char(${lh.playedAt}, 'YYYY-MM') = ${prevMonth}`,
+      ),
+    );
+
+  // Find "rising" artists (in current top 10 but not in prev top 10, or significantly more plays)
+  const prevMap = new Map(prevArtists.map((a) => [a.artistName, a]));
+  const rising = currentArtists
+    .filter((a) => {
+      const prev = prevMap.get(a.artistName);
+      return !prev || Number(a.playCount) > Number(prev.playCount) * 1.5;
+    })
+    .slice(0, 3);
+
+  // Find "fading" artists (in prev top 10 but not in current top 10)
+  const currentMap = new Map(currentArtists.map((a) => [a.artistName, a]));
+  const fading = prevArtists
+    .filter((a) => !currentMap.has(a.artistName))
+    .slice(0, 3);
+
+  return c.json({
+    data: {
+      currentMonth,
+      prevMonth,
+      current: { artists: currentArtists, stats: currentStats },
+      previous: { artists: prevArtists, stats: prevStats },
+      rising,
+      fading,
+    },
+  });
+});
+
 export default vault;
