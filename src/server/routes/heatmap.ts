@@ -6,14 +6,15 @@
  * Optionally filterable by artist to show per-artist fandom depth.
  *
  * Endpoints:
- *   GET /api/heatmap/data    - Daily play counts & ms_played for a year
- *   GET /api/heatmap/artists - Top 50 artists (for the artist filter dropdown)
- *   GET /api/heatmap/summary - Year summary: streaks, most active day, avg daily plays
+ *   GET /api/heatmap/data     - Daily play counts & ms_played for a year
+ *   GET /api/heatmap/artists  - Top 50 artists (for the artist filter dropdown)
+ *   GET /api/heatmap/summary  - Year summary: streaks, most active day, avg daily plays
+ *   GET /api/heatmap/silences - Silence periods (3+ consecutive days with no plays)
  *
  * All routes require authentication.
  */
 import { Hono } from "hono";
-import { and, count, desc, eq, gte, lt, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lt, sql, sum } from "drizzle-orm";
 import type { Session } from "hono-sessions";
 import type { Env } from "../types";
 import { createDb } from "../db";
@@ -218,6 +219,160 @@ heatmapRoutes.get("/summary", async (c) => {
       averageDailyPlays,
     },
   });
+});
+
+/**
+ * GET /silences — Silence periods for a given year.
+ *
+ * A "silence" is a stretch of 3 or more consecutive calendar days with zero
+ * plays. For each silence the endpoint also returns the last track the user
+ * played before the gap and the first track played after it, providing
+ * emotional bookends to the quiet period.
+ */
+heatmapRoutes.get("/silences", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+
+  const yearParam = c.req.query("year");
+  const year = yearParam ? parseInt(yearParam, 10) : new Date().getUTCFullYear();
+
+  if (isNaN(year) || year < 2000 || year > 2100) {
+    return c.json({ error: "Invalid year" }, 400);
+  }
+
+  const yearStart = new Date(Date.UTC(year, 0, 1));
+  const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
+
+  const db = createDb(c.env.DATABASE_URL);
+
+  // Fetch per-day counts for the year (same query pattern as /data and /summary)
+  const dailyCounts = await db
+    .select({
+      date: sql<string>`DATE(${listeningHistory.playedAt} AT TIME ZONE 'UTC')`.as("date"),
+      count: count().as("count"),
+    })
+    .from(listeningHistory)
+    .where(
+      and(
+        eq(listeningHistory.userId, userId),
+        gte(listeningHistory.playedAt, yearStart),
+        lt(listeningHistory.playedAt, yearEnd)
+      )
+    )
+    .groupBy(sql`DATE(${listeningHistory.playedAt} AT TIME ZONE 'UTC')`);
+
+  const playDates = new Set(dailyCounts.map((d) => String(d.date)));
+
+  // Walk every calendar day in the year (up to today for the current year)
+  // and detect consecutive zero-play stretches of 3+ days.
+  const now = new Date();
+  const lastDate =
+    now.getUTCFullYear() === year
+      ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+      : new Date(Date.UTC(year, 11, 31));
+
+  interface SilencePeriod {
+    startDate: string;
+    endDate: string;
+    days: number;
+    lastTrackBefore: { trackName: string; artistName: string } | null;
+    firstTrackAfter: { trackName: string; artistName: string } | null;
+  }
+
+  const silences: SilencePeriod[] = [];
+  let currentStart: Date | null = null;
+  let currentDays = 0;
+
+  const d = new Date(yearStart);
+  while (d <= lastDate) {
+    const dateStr = d.toISOString().slice(0, 10);
+    if (!playDates.has(dateStr)) {
+      if (!currentStart) currentStart = new Date(d);
+      currentDays++;
+    } else {
+      if (currentStart && currentDays >= 3) {
+        const silenceEnd = new Date(d);
+        silenceEnd.setUTCDate(silenceEnd.getUTCDate() - 1);
+        silences.push({
+          startDate: currentStart.toISOString().slice(0, 10),
+          endDate: silenceEnd.toISOString().slice(0, 10),
+          days: currentDays,
+          lastTrackBefore: null,
+          firstTrackAfter: null,
+        });
+      }
+      currentStart = null;
+      currentDays = 0;
+    }
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  // Handle trailing silence at end of year / today
+  if (currentStart && currentDays >= 3) {
+    silences.push({
+      startDate: currentStart.toISOString().slice(0, 10),
+      endDate: lastDate.toISOString().slice(0, 10),
+      days: currentDays,
+      lastTrackBefore: null,
+      firstTrackAfter: null,
+    });
+  }
+
+  // For each silence, fetch the emotional bookends:
+  //   - last track played before the silence began
+  //   - first track played after the silence ended
+  for (const silence of silences) {
+    const silenceStart = new Date(`${silence.startDate}T00:00:00Z`);
+    const silenceEndNext = new Date(`${silence.endDate}T00:00:00Z`);
+    silenceEndNext.setUTCDate(silenceEndNext.getUTCDate() + 1);
+
+    const [beforeRows, afterRows] = await Promise.all([
+      db
+        .select({
+          trackName: listeningHistory.trackName,
+          artistName: listeningHistory.artistName,
+        })
+        .from(listeningHistory)
+        .where(
+          and(
+            eq(listeningHistory.userId, userId),
+            lt(listeningHistory.playedAt, silenceStart)
+          )
+        )
+        .orderBy(desc(listeningHistory.playedAt))
+        .limit(1),
+      db
+        .select({
+          trackName: listeningHistory.trackName,
+          artistName: listeningHistory.artistName,
+        })
+        .from(listeningHistory)
+        .where(
+          and(
+            eq(listeningHistory.userId, userId),
+            gte(listeningHistory.playedAt, silenceEndNext)
+          )
+        )
+        .orderBy(asc(listeningHistory.playedAt))
+        .limit(1),
+    ]);
+
+    if (beforeRows.length > 0) {
+      silence.lastTrackBefore = {
+        trackName: beforeRows[0].trackName,
+        artistName: beforeRows[0].artistName,
+      };
+    }
+    if (afterRows.length > 0) {
+      silence.firstTrackAfter = {
+        trackName: afterRows[0].trackName,
+        artistName: afterRows[0].artistName,
+      };
+    }
+  }
+
+  const totalSilentDays = silences.reduce((sum, s) => sum + s.days, 0);
+
+  return c.json({ data: { silences, totalSilentDays } });
 });
 
 export default heatmapRoutes;
