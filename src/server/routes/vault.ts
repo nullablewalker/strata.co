@@ -26,7 +26,8 @@ async function getAccessToken(
 ): Promise<string> {
   try {
     return getValidAccessToken(session);
-  } catch {
+  } catch (err) {
+    console.log("[vault] Access token expired, attempting refresh...", (err as Error).message);
     // Token expired, refresh it
     const userId = session.get("userId")!;
     const db = createDb(c.env.DATABASE_URL);
@@ -36,6 +37,7 @@ async function getAccessToken(
     });
 
     if (!user?.refreshToken) {
+      console.error("[vault] No refresh token in DB for user", userId);
       throw new Error("No refresh token available");
     }
 
@@ -314,11 +316,16 @@ vault.get("/metadata", async (c) => {
   let accessToken: string;
   try {
     accessToken = await getAccessToken(c, session);
-  } catch {
-    return c.json({ data: {}, error: "Could not obtain Spotify access token" });
+  } catch (err) {
+    console.error("[vault/metadata] Failed to get access token:", err);
+    return c.json({ error: "Could not obtain Spotify access token" }, 502);
   }
 
   const metadata = await fetchTrackMetadata(accessToken, trackIds);
+
+  if (metadata.size === 0) {
+    console.warn("[vault/metadata] Spotify returned no metadata for", trackIds.length, "tracks");
+  }
 
   // Convert Map to plain object for JSON serialization
   const result: Record<string, { albumArt: string; albumName: string }> = {};

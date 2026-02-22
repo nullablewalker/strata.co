@@ -113,13 +113,10 @@ function RowSkeleton() {
 
 export default function Vault() {
   // Column browser state
-  const [genres, setGenres] = useState<string[]>([]);
   const [browserArtists, setBrowserArtists] = useState<string[]>([]);
   const [browserAlbums, setBrowserAlbums] = useState<string[]>([]);
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
-  const [genresLoading, setGenresLoading] = useState(true);
 
   // Track list state
   const [sort, setSort] = useState<SortOption>("plays");
@@ -164,15 +161,6 @@ export default function Vault() {
       .finally(() => setStatsLoading(false));
   }, []);
 
-  // Fetch genres on mount
-  useEffect(() => {
-    setGenresLoading(true);
-    apiFetch<{ data: string[] }>("/vault/genres")
-      .then((res) => setGenres(res.data))
-      .catch(() => setGenres([]))
-      .finally(() => setGenresLoading(false));
-  }, []);
-
   // Fetch browser artists (all artist names from the artists endpoint)
   useEffect(() => {
     const params = new URLSearchParams({
@@ -200,14 +188,6 @@ export default function Vault() {
   }, [selectedArtist]);
 
   // Column browser selection handlers
-  function handleGenreSelect(genre: string | null) {
-    setSelectedGenre(genre);
-    setSelectedArtist(null);
-    setSelectedAlbum(null);
-    // Genre filtering is informational -- we don't have genre-to-artist mapping in DB
-    // so we just update the UI selection state for visual feedback
-  }
-
   function handleArtistSelect(artist: string | null) {
     setSelectedArtist(artist);
     setSelectedAlbum(null);
@@ -281,9 +261,18 @@ export default function Vault() {
         `/vault/metadata?trackIds=${batch.join(",")}`,
       )
         .then((res) => {
-          setMetadata((prev) => ({ ...prev, ...res.data }));
+          if (res.data && Object.keys(res.data).length > 0) {
+            setMetadata((prev) => ({ ...prev, ...res.data }));
+          } else {
+            // Server returned empty metadata — clear from fetched set so they can be retried on next load
+            console.warn("[Vault] Metadata response empty for batch of", batch.length, "tracks");
+            for (const id of batch) {
+              fetchedMetadataRef.current.delete(id);
+            }
+          }
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error("[Vault] Failed to fetch metadata:", err);
           // Remove from fetched set so they can be retried
           for (const id of batch) {
             fetchedMetadataRef.current.delete(id);
@@ -345,16 +334,12 @@ export default function Vault() {
 
       {/* Column Browser */}
       <ColumnBrowser
-        genres={genres}
         artists={browserArtists}
         albums={browserAlbums}
-        selectedGenre={selectedGenre}
         selectedArtist={selectedArtist}
         selectedAlbum={selectedAlbum}
-        onGenreSelect={handleGenreSelect}
         onArtistSelect={handleArtistSelect}
         onAlbumSelect={handleAlbumSelect}
-        loading={genresLoading}
       />
 
       {/* Controls */}
