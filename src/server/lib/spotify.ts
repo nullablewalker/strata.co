@@ -56,13 +56,10 @@ interface SpotifyTrack {
   artists: Array<{ id: string; name: string }>;
 }
 
-interface SpotifyTracksResponse {
-  tracks: (SpotifyTrack | null)[];
-}
-
 /**
- * Batch fetch track metadata from Spotify API.
- * Max 50 IDs per request per Spotify API limits.
+ * Fetch track metadata from Spotify API using individual track endpoints.
+ * The batch endpoint (GET /v1/tracks?ids=) is restricted in Spotify's
+ * development mode, so we use GET /v1/tracks/{id} with concurrency control.
  */
 export async function fetchTrackMetadata(
   accessToken: string,
@@ -70,32 +67,40 @@ export async function fetchTrackMetadata(
 ): Promise<Map<string, TrackMetadata>> {
   const result = new Map<string, TrackMetadata>();
   const uniqueIds = [...new Set(trackIds)];
+  const CONCURRENCY = 10;
 
-  for (let i = 0; i < uniqueIds.length; i += 50) {
-    const batch = uniqueIds.slice(i, i + 50);
-    const ids = batch.join(",");
+  for (let i = 0; i < uniqueIds.length; i += CONCURRENCY) {
+    const chunk = uniqueIds.slice(i, i + CONCURRENCY);
 
-    const res = await fetch(`https://api.spotify.com/v1/tracks?ids=${ids}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const settled = await Promise.allSettled(
+      chunk.map(async (id) => {
+        const res = await fetch(`https://api.spotify.com/v1/tracks/${id}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
 
-    // Handle rate limiting
-    if (res.status === 429) {
-      const retryAfter = Number(res.headers.get("Retry-After") ?? "1");
-      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-      i -= 50;
-      continue;
-    }
+        if (res.status === 429) {
+          const retryAfter = Number(res.headers.get("Retry-After") ?? "1");
+          await new Promise((r) => setTimeout(r, retryAfter * 1000));
+          // Retry once
+          const retry = await fetch(`https://api.spotify.com/v1/tracks/${id}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (!retry.ok) return null;
+          return (await retry.json()) as SpotifyTrack;
+        }
 
-    if (!res.ok) {
-      console.error(`Spotify API error: ${res.status} ${res.statusText}`);
-      continue;
-    }
+        if (!res.ok) {
+          console.error(`[fetchTrackMetadata] Spotify API ${res.status} for track ${id}`);
+          return null;
+        }
 
-    const data = (await res.json()) as SpotifyTracksResponse;
+        return (await res.json()) as SpotifyTrack;
+      }),
+    );
 
-    for (const track of data.tracks) {
-      if (!track) continue;
+    for (const entry of settled) {
+      if (entry.status !== "fulfilled" || !entry.value) continue;
+      const track = entry.value;
 
       const albumArt =
         track.album.images.find((img) => img.width === 300)?.url ??
@@ -105,7 +110,7 @@ export async function fetchTrackMetadata(
       result.set(track.id, {
         albumArt,
         albumName: track.album.name,
-        genres: [], // Track-level genres not available; would need artist endpoint
+        genres: [],
       });
     }
   }
@@ -121,13 +126,9 @@ interface SpotifyArtist {
   genres: string[];
 }
 
-interface SpotifyArtistsResponse {
-  artists: (SpotifyArtist | null)[];
-}
-
 /**
- * Batch fetch artist genres from Spotify API.
- * Max 50 IDs per request per Spotify API limits.
+ * Fetch artist genres from Spotify API using individual endpoints.
+ * Uses GET /v1/artists/{id} to avoid batch endpoint restrictions.
  */
 export async function fetchArtistGenres(
   accessToken: string,
@@ -135,33 +136,35 @@ export async function fetchArtistGenres(
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   const uniqueIds = [...new Set(artistIds)];
+  const CONCURRENCY = 10;
 
-  for (let i = 0; i < uniqueIds.length; i += 50) {
-    const batch = uniqueIds.slice(i, i + 50);
-    const ids = batch.join(",");
+  for (let i = 0; i < uniqueIds.length; i += CONCURRENCY) {
+    const chunk = uniqueIds.slice(i, i + CONCURRENCY);
 
-    const res = await fetch(`https://api.spotify.com/v1/artists?ids=${ids}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const settled = await Promise.allSettled(
+      chunk.map(async (id) => {
+        const res = await fetch(`https://api.spotify.com/v1/artists/${id}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
 
-    // Handle rate limiting
-    if (res.status === 429) {
-      const retryAfter = Number(res.headers.get("Retry-After") ?? "1");
-      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-      i -= 50;
-      continue;
-    }
+        if (res.status === 429) {
+          const retryAfter = Number(res.headers.get("Retry-After") ?? "1");
+          await new Promise((r) => setTimeout(r, retryAfter * 1000));
+          const retry = await fetch(`https://api.spotify.com/v1/artists/${id}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (!retry.ok) return null;
+          return (await retry.json()) as SpotifyArtist;
+        }
 
-    if (!res.ok) {
-      console.error(`Spotify API error: ${res.status} ${res.statusText}`);
-      continue;
-    }
+        if (!res.ok) return null;
+        return (await res.json()) as SpotifyArtist;
+      }),
+    );
 
-    const data = (await res.json()) as SpotifyArtistsResponse;
-
-    for (const artist of data.artists) {
-      if (!artist) continue;
-      result.set(artist.id, artist.genres);
+    for (const entry of settled) {
+      if (entry.status !== "fulfilled" || !entry.value) continue;
+      result.set(entry.value.id, entry.value.genres);
     }
   }
 
