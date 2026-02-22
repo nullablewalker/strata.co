@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { unzipSync } from "fflate";
 import { apiFetch } from "../lib/api";
 import ConfirmDialog from "../components/ConfirmDialog";
 import type { ImportResult, ImportStatus } from "../../shared/validators/history";
@@ -40,12 +41,53 @@ export default function Import() {
     fetchStatus();
   }, [fetchStatus]);
 
+  const extractJsonFromZip = async (file: File): Promise<File[]> => {
+    const buffer = await file.arrayBuffer();
+    const unzipped = unzipSync(new Uint8Array(buffer));
+    const jsonFiles: File[] = [];
+    for (const [path, data] of Object.entries(unzipped)) {
+      if (
+        path.endsWith(".json") &&
+        !path.startsWith("__MACOSX") &&
+        !path.includes("/.__")
+      ) {
+        const copy = new Uint8Array(data.length);
+        copy.set(data);
+        const blob = new Blob([copy.buffer as ArrayBuffer], { type: "application/json" });
+        const fileName = path.split("/").pop() || path;
+        jsonFiles.push(
+          new File([blob], fileName, { type: "application/json" }),
+        );
+      }
+    }
+    return jsonFiles;
+  };
+
   const processFiles = useCallback(
     async (fileList: FileList | File[]) => {
-      const jsonFiles = Array.from(fileList).filter((f) =>
+      const allFiles = Array.from(fileList);
+
+      // Separate JSON and ZIP files
+      const jsonFiles: File[] = allFiles.filter((f) =>
         f.name.endsWith(".json"),
       );
-      if (jsonFiles.length === 0) return;
+      const zipFiles = allFiles.filter((f) => f.name.endsWith(".zip"));
+
+      // Extract JSON files from ZIPs
+      for (const zip of zipFiles) {
+        try {
+          const extracted = await extractJsonFromZip(zip);
+          jsonFiles.push(...extracted);
+        } catch {
+          console.error(`Failed to extract ${zip.name}`);
+        }
+      }
+
+      if (jsonFiles.length === 0) {
+        setUploadState("error");
+        setFiles([{ name: "エラー", status: "error" }]);
+        return;
+      }
 
       setUploadState("uploading");
       const progress: FileProgress[] = jsonFiles.map((f) => ({
@@ -206,7 +248,7 @@ export default function Import() {
               4
             </span>
             <span>
-              ZIPを解凍し、JSONファイルを下のエリアにアップロードしてください
+              JSONファイルまたはZIPファイルをそのままアップロードしてください
             </span>
           </li>
         </ol>
@@ -230,7 +272,7 @@ export default function Import() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json"
+          accept=".json,.zip"
           multiple
           className="hidden"
           onChange={handleFileChange}
@@ -249,10 +291,10 @@ export default function Import() {
           />
         </svg>
         <p className="mt-3 text-sm text-strata-slate-400">
-          JSONファイルをドラッグ＆ドロップ、またはクリックして選択
+          JSONまたはZIPファイルをドラッグ＆ドロップ、またはクリックして選択
         </p>
         <p className="mt-1 text-xs text-strata-slate-500">
-          複数ファイル対応（.json）
+          複数ファイル対応（.json / .zip）
         </p>
       </div>
 
