@@ -35,7 +35,6 @@ const navGroups = [
     items: [
       { to: "/heatmap", label: "Heatmap", icon: "▦" },
       { to: "/patterns", label: "Patterns", icon: "◎" },
-      { to: "/rankings", label: "Rankings", icon: "♛" },
     ],
   },
   {
