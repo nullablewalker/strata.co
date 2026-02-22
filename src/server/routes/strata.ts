@@ -9,7 +9,7 @@
  * All routes require authentication.
  */
 import { Hono } from "hono";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Session } from "hono-sessions";
 import type { Env } from "../types";
 import { createDb } from "../db";
@@ -137,7 +137,7 @@ strataRoutes.get("/eras", async (c) => {
     .where(
       and(
         eq(listeningHistory.userId, userId),
-        sql`${listeningHistory.artistName} = ANY(${artistNames})`,
+        inArray(listeningHistory.artistName, artistNames),
       ),
     )
     .groupBy(
