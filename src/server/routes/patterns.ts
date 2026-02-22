@@ -338,6 +338,70 @@ patterns.get("/overview", async (c) => {
 });
 
 /**
+ * GET /time-artists — Top 5 artists for each time-of-day period.
+ *
+ * Returns four named periods (night, morning, daytime, evening) with
+ * Japanese labels and the top 5 most-played artists in each window.
+ * Supports optional ?year= query filter.
+ */
+patterns.get("/time-artists", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const year = c.req.query("year");
+
+  const db = createDb(c.env.DATABASE_URL);
+  const lh = listeningHistory;
+
+  const periods = [
+    { name: "night", label: "深夜の相棒", hours: [22, 23, 0, 1, 2, 3] },
+    { name: "morning", label: "夜明けの一枚", hours: [4, 5, 6, 7, 8, 9] },
+    { name: "daytime", label: "陽だまりの音楽", hours: [10, 11, 12, 13, 14, 15, 16, 17] },
+    { name: "evening", label: "黄昏のサウンド", hours: [18, 19, 20, 21] },
+  ];
+
+  const result: Record<
+    string,
+    {
+      label: string;
+      artists: Array<{ artistName: string; playCount: number; msPlayed: number }>;
+    }
+  > = {};
+
+  for (const period of periods) {
+    const conditions = [eq(lh.userId, userId)];
+
+    if (year) {
+      conditions.push(
+        sql`EXTRACT(YEAR FROM ${lh.playedAt}) = ${Number(year)}`,
+      );
+    }
+
+    // Filter to the hours belonging to this time period
+    const hourCondition = sql`EXTRACT(HOUR FROM ${lh.playedAt}) IN (${sql.join(
+      period.hours.map((h) => sql`${h}`),
+      sql`, `,
+    )})`;
+    conditions.push(hourCondition);
+
+    const artists = await db
+      .select({
+        artistName: lh.artistName,
+        playCount: sql<number>`count(*)`.mapWith(Number),
+        msPlayed: sql<number>`coalesce(sum(${lh.msPlayed}), 0)`.mapWith(Number),
+      })
+      .from(lh)
+      .where(and(...conditions))
+      .groupBy(lh.artistName)
+      .orderBy(sql`count(*) DESC`)
+      .limit(5);
+
+    result[period.name] = { label: period.label, artists };
+  }
+
+  return c.json({ data: result });
+});
+
+/**
  * GET /artists — Distinct artist names from the user's listening history.
  *
  * Sorted by total play count descending so the most-listened artists appear
