@@ -17,6 +17,9 @@ export const envSchema = z.object({
   // Minimum 32 chars required for AES-256 encryption used by CookieStore
   SESSION_ENCRYPTION_KEY: z.string().min(32),
   ENVIRONMENT: z.enum(["development", "production"]).default("development"),
+  // New Relic — optional; omitted in local dev, set via Cloudflare secrets
+  NEW_RELIC_LICENSE_KEY: z.string().min(1).optional(),
+  NEW_RELIC_ACCOUNT_ID: z.string().min(1).optional(),
 });
 
 export type ValidatedEnv = z.infer<typeof envSchema>;

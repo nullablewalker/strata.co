@@ -11,6 +11,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import type { Env } from "./types";
+import { newrelicMiddleware } from "./middleware/newrelic";
 import { createSessionMiddleware } from "./middleware/session";
 import auth from "./routes/auth";
 import importRoutes from "./routes/import";
@@ -20,6 +21,8 @@ import patterns from "./routes/patterns";
 import strataRoutes from "./routes/strata";
 
 const app = new Hono<{ Bindings: Env }>()
+  // New Relic instrumentation — registered first to wrap the entire lifecycle
+  .use("*", newrelicMiddleware())
   // Request logging on all routes (non-API static asset requests included)
   .use("*", logger())
   // CORS and encrypted-cookie sessions are scoped to /api/* only, so static

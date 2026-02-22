@@ -17,4 +17,8 @@ export interface Env {
   // AES encryption of the session cookie payload.
   SESSION_ENCRYPTION_KEY: string;
   ENVIRONMENT: string;
+  // New Relic — optional because they are not set in local dev. Configure via
+  // Cloudflare dashboard secrets in production.
+  NEW_RELIC_LICENSE_KEY?: string;
+  NEW_RELIC_ACCOUNT_ID?: string;
 }
