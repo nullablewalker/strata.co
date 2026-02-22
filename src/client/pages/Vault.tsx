@@ -290,7 +290,7 @@ export default function Vault() {
   const hasMore = tracks.length < totalTracks;
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className={`space-y-6 transition-[padding-bottom] duration-500 ${nowPlaying ? 'pb-40 lg:pb-28' : 'pb-6'}`}>
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white">The Vault</h1>
@@ -468,14 +468,11 @@ export default function Vault() {
         </div>
       )}
 
-      {/* Spotify Player Bar */}
-      {nowPlaying && (
-        <PlayerBar
-          track={nowPlaying}
-          albumArt={metadata[nowPlaying.trackSpotifyId]?.albumArt}
-          onClose={() => setNowPlaying(null)}
-        />
-      )}
+      {/* Spotify Player Bar — always rendered, slides in/out */}
+      <PlayerBar
+        track={nowPlaying}
+        albumArt={nowPlaying ? metadata[nowPlaying.trackSpotifyId]?.albumArt : undefined}
+      />
     </div>
   );
 }
@@ -579,83 +576,118 @@ function TrackList({
 function PlayerBar({
   track,
   albumArt,
-  onClose,
 }: {
-  track: VaultTrack;
+  track: VaultTrack | null;
   albumArt?: string;
-  onClose: () => void;
 }) {
-  const [showEmbed, setShowEmbed] = useState(false);
-
   return (
-    <div className="border-white/[0.06] bg-strata-bg/80 backdrop-blur-xl fixed inset-x-0 bottom-0 z-50 border-t">
-      {/* Spotify embed player */}
-      {showEmbed && (
-        <div className="border-strata-border border-b">
-          <iframe
-            src={`https://open.spotify.com/embed/track/${track.trackSpotifyId}?theme=0`}
-            width="100%"
-            height="80"
-            frameBorder={0}
-            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-            loading="lazy"
-            className="block"
-          />
-        </div>
-      )}
+    <div
+      className={`fixed inset-x-0 bottom-0 z-40 transition-transform duration-500 ease-out ${
+        track ? "translate-y-0" : "translate-y-full"
+      }`}
+    >
+      {/* Amber accent glow — top edge (地層 motif) */}
+      <div className="h-px w-full bg-gradient-to-r from-transparent via-strata-amber-500/60 to-transparent" />
+      <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-strata-amber-400/20 to-transparent blur-sm" />
 
-      {/* Player controls */}
-      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
-        {/* Album art */}
-        {albumArt ? (
-          <img src={albumArt} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
-        ) : (
-          <span className="bg-strata-border block h-12 w-12 shrink-0 rounded" />
-        )}
+      <div className="border-white/[0.06] bg-strata-bg/90 border-t backdrop-blur-xl">
+        {/* Desktop layout (lg+): [Art] [Info] [Embed] [Link] */}
+        <div className="mx-auto hidden max-w-7xl items-center gap-4 px-4 py-2.5 lg:flex">
+          {/* Album art */}
+          {albumArt ? (
+            <img src={albumArt} alt="" className="h-14 w-14 shrink-0 rounded object-cover" />
+          ) : (
+            <span className="bg-strata-border block h-14 w-14 shrink-0 rounded" />
+          )}
 
-        {/* Track info */}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-white">{track.trackName}</p>
-          <p className="text-strata-slate-400 truncate text-xs">{track.artistName}</p>
-        </div>
+          {/* Track info */}
+          <div className="min-w-0 shrink-0 basis-44">
+            <p className="truncate text-sm font-medium text-white">
+              {track?.trackName}
+            </p>
+            <p className="text-strata-slate-400 truncate text-xs">
+              {track?.artistName}
+            </p>
+          </div>
 
-        {/* Actions */}
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            onClick={() => setShowEmbed(!showEmbed)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-              showEmbed
-                ? "border-strata-amber-500/50 bg-strata-amber-500/20 text-strata-amber-300"
-                : "border-strata-border text-strata-slate-400 hover:border-strata-amber-500/50 hover:text-white"
-            }`}
-          >
-            {showEmbed ? "Hide Player" : "Preview"}
-          </button>
+          {/* Spotify Embed — always visible */}
+          <div className="min-w-0 flex-1">
+            {track && (
+              <iframe
+                key={track.trackSpotifyId}
+                src={`https://open.spotify.com/embed/track/${track.trackSpotifyId}?theme=0`}
+                width="100%"
+                height="80"
+                frameBorder={0}
+                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                loading="lazy"
+                className="block rounded"
+              />
+            )}
+          </div>
 
-          <a
-            href={`https://open.spotify.com/track/${track.trackSpotifyId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="border-strata-border text-strata-slate-400 hover:border-strata-amber-500/50 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:text-white"
-          >
-            Open in Spotify
-          </a>
-
-          <button
-            onClick={onClose}
-            className="text-strata-slate-500 rounded-lg px-2 py-1.5 transition-colors hover:text-white"
-            aria-label="Close player"
-          >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
+          {/* Open in Spotify link */}
+          {track && (
+            <a
+              href={`https://open.spotify.com/track/${track.trackSpotifyId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="border-strata-border text-strata-slate-400 hover:border-strata-amber-500/50 shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:text-white"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+              Open in Spotify
+            </a>
+          )}
+        </div>
+
+        {/* Mobile layout: [Embed full width] then [Art] [Info] [Link] */}
+        <div className="lg:hidden">
+          {/* Spotify Embed — full width */}
+          <div className="px-3 pt-2">
+            {track && (
+              <iframe
+                key={`mobile-${track.trackSpotifyId}`}
+                src={`https://open.spotify.com/embed/track/${track.trackSpotifyId}?theme=0`}
+                width="100%"
+                height="80"
+                frameBorder={0}
+                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                loading="lazy"
+                className="block rounded"
+              />
+            )}
+          </div>
+
+          {/* Track info row */}
+          <div className="flex items-center gap-3 px-3 py-2.5">
+            {/* Album art */}
+            {albumArt ? (
+              <img src={albumArt} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+            ) : (
+              <span className="bg-strata-border block h-12 w-12 shrink-0 rounded" />
+            )}
+
+            {/* Track info */}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-white">
+                {track?.trackName}
+              </p>
+              <p className="text-strata-slate-400 truncate text-xs">
+                {track?.artistName}
+              </p>
+            </div>
+
+            {/* Open in Spotify */}
+            {track && (
+              <a
+                href={`https://open.spotify.com/track/${track.trackSpotifyId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="border-strata-border text-strata-slate-400 hover:border-strata-amber-500/50 shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:text-white"
+              >
+                Open in Spotify
+              </a>
+            )}
+          </div>
         </div>
       </div>
     </div>
