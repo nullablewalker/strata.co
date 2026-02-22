@@ -1,16 +1,12 @@
 import { useRef, useCallback } from "react";
 
 interface ColumnBrowserProps {
-  genres: string[];
   artists: string[];
   albums: string[];
-  selectedGenre: string | null;
   selectedArtist: string | null;
   selectedAlbum: string | null;
-  onGenreSelect: (genre: string | null) => void;
   onArtistSelect: (artist: string | null) => void;
   onAlbumSelect: (album: string | null) => void;
-  loading?: boolean;
 }
 
 function BrowserColumn({
@@ -132,26 +128,15 @@ function BrowserColumn({
 }
 
 export default function ColumnBrowser({
-  genres,
   artists,
   albums,
-  selectedGenre,
   selectedArtist,
   selectedAlbum,
-  onGenreSelect,
   onArtistSelect,
   onAlbumSelect,
-  loading,
 }: ColumnBrowserProps) {
   return (
     <div className="flex gap-2">
-      <BrowserColumn
-        title="Genre"
-        items={genres}
-        selected={selectedGenre}
-        onSelect={onGenreSelect}
-        loading={loading}
-      />
       <BrowserColumn
         title="Artist"
         items={artists}
