@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { sql, eq, ilike, or, and, desc, asc, count, countDistinct, gte, lte } from "drizzle-orm";
-import { Spotify } from "arctic";
 import type { Session } from "hono-sessions";
 import type { Env } from "../types";
 import { authGuard, type SessionData } from "../middleware/session";
@@ -18,6 +17,12 @@ const vault = new Hono<{ Bindings: Env }>();
 vault.use("*", authGuard());
 
 /**
+ * Singleton refresh lock — prevents multiple concurrent metadata requests
+ * from all trying to refresh the token simultaneously.
+ */
+let refreshPromise: Promise<string> | null = null;
+
+/**
  * Helper: get a valid access token, refreshing if needed.
  */
 async function getAccessToken(
@@ -28,6 +33,13 @@ async function getAccessToken(
     return getValidAccessToken(session);
   } catch (err) {
     console.log("[vault] Access token expired, attempting refresh...", (err as Error).message);
+
+    // If a refresh is already in progress, wait for it instead of starting another
+    if (refreshPromise) {
+      console.log("[vault] Refresh already in progress, waiting...");
+      return refreshPromise;
+    }
+
     // Token expired, refresh it
     const userId = session.get("userId")!;
     const db = createDb(c.env.DATABASE_URL);
@@ -41,13 +53,27 @@ async function getAccessToken(
       throw new Error("No refresh token available");
     }
 
-    const spotify = new Spotify(
+    refreshPromise = refreshAndUpdateSession(
+      session,
       c.env.SPOTIFY_CLIENT_ID,
       c.env.SPOTIFY_CLIENT_SECRET,
-      `${new URL(c.req.url).origin}/api/auth/callback`,
-    );
+      user.refreshToken,
+    )
+      .then(async (result) => {
+        if (result.newRefreshToken) {
+          await db
+            .update(users)
+            .set({ refreshToken: result.newRefreshToken })
+            .where(eq(users.id, userId));
+          console.log("[vault] Refresh token rotated and saved to DB");
+        }
+        return result.accessToken;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
 
-    return refreshAndUpdateSession(session, spotify, user.refreshToken);
+    return refreshPromise;
   }
 }
 
@@ -318,7 +344,7 @@ vault.get("/metadata", async (c) => {
     accessToken = await getAccessToken(c, session);
   } catch (err) {
     console.error("[vault/metadata] Failed to get access token:", err);
-    return c.json({ error: "Could not obtain Spotify access token" }, 502);
+    return c.json({ error: "token_expired", message: "Could not obtain Spotify access token. Please re-authenticate." }, 401);
   }
 
   const metadata = await fetchTrackMetadata(accessToken, trackIds);

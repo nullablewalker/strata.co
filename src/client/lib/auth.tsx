@@ -46,6 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // Listen for auth:expired events dispatched by apiFetch when the server
+  // returns 401 (e.g. token refresh failed). Reset auth state so the user
+  // is redirected to the login page.
+  useEffect(() => {
+    const handleExpired = () => setUser(null);
+    window.addEventListener("auth:expired", handleExpired);
+    return () => window.removeEventListener("auth:expired", handleExpired);
+  }, []);
+
   // Logout clears the server session and then performs a hard navigation
   // to "/" to fully reset client state (avoids stale data in React tree).
   const logout = useCallback(async () => {

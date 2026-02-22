@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
 import { http, HttpResponse } from "msw";
 import {
   spotifyServer,
@@ -11,6 +11,7 @@ import {
   refreshAndUpdateSession,
   fetchTrackMetadata,
   searchArtist,
+  clearMetadataCache,
 } from "./spotify";
 
 // ---------------------------------------------------------------------------
@@ -18,6 +19,7 @@ import {
 // ---------------------------------------------------------------------------
 
 beforeAll(() => spotifyServer.listen({ onUnhandledRequest: "error" }));
+beforeEach(() => clearMetadataCache()); // clear in-memory cache between tests
 afterEach(() => spotifyServer.resetHandlers());
 afterAll(() => spotifyServer.close());
 
@@ -59,27 +61,72 @@ describe("getValidAccessToken", () => {
 // ---------------------------------------------------------------------------
 
 describe("refreshAndUpdateSession", () => {
-  it("calls spotify.refreshAccessToken and updates session", async () => {
+  it("calls Spotify token endpoint and updates session", async () => {
     const session = createMockSession({ userId: "u1", accessToken: "old" });
-    const newExpiry = new Date(Date.now() + 3600_000);
-
-    const mockSpotify = {
-      refreshAccessToken: vi.fn().mockResolvedValue({
-        accessToken: () => "new_tok",
-        accessTokenExpiresAt: () => newExpiry,
-      }),
-    };
 
     const result = await refreshAndUpdateSession(
       session as never,
-      mockSpotify as never,
+      "test-client-id",
+      "test-client-secret",
       "refresh_tok",
     );
 
-    expect(mockSpotify.refreshAccessToken).toHaveBeenCalledWith("refresh_tok");
-    expect(result).toBe("new_tok");
-    expect(session.set).toHaveBeenCalledWith("accessToken", "new_tok");
-    expect(session.set).toHaveBeenCalledWith("accessTokenExpiresAt", newExpiry.getTime());
+    // spotifyTokenResponse from MSW mock returns access_token: "new_access_token"
+    expect(result).toEqual({
+      accessToken: "new_access_token",
+      newRefreshToken: "new_refresh_token",
+    });
+    expect(session.set).toHaveBeenCalledWith("accessToken", "new_access_token");
+    expect(session.set).toHaveBeenCalledWith("accessTokenExpiresAt", expect.any(Number));
+  });
+
+  it("returns undefined newRefreshToken when Spotify omits refresh_token", async () => {
+    spotifyServer.use(
+      http.post("https://accounts.spotify.com/api/token", () => {
+        return HttpResponse.json({
+          access_token: "refreshed_tok",
+          token_type: "bearer",
+          expires_in: 3600,
+          scope: "user-read-email",
+        });
+      }),
+    );
+
+    const session = createMockSession({ userId: "u1", accessToken: "old" });
+
+    const result = await refreshAndUpdateSession(
+      session as never,
+      "test-client-id",
+      "test-client-secret",
+      "my_refresh",
+    );
+
+    expect(result).toEqual({
+      accessToken: "refreshed_tok",
+      newRefreshToken: undefined,
+    });
+  });
+
+  it("throws when token endpoint returns an error", async () => {
+    spotifyServer.use(
+      http.post("https://accounts.spotify.com/api/token", () => {
+        return HttpResponse.json(
+          { error: "invalid_grant", error_description: "Refresh token revoked" },
+          { status: 400 },
+        );
+      }),
+    );
+
+    const session = createMockSession({ userId: "u1", accessToken: "old" });
+
+    await expect(
+      refreshAndUpdateSession(
+        session as never,
+        "test-client-id",
+        "test-client-secret",
+        "bad_refresh",
+      ),
+    ).rejects.toThrow("Token refresh failed: 400");
   });
 });
 

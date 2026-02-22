@@ -32,6 +32,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent("auth:expired"));
+    }
     const error = new Error(`API error: ${res.status} ${res.statusText}`);
     noticeError(error, { apiPath: path, status: String(res.status) });
     throw error;
