@@ -202,7 +202,7 @@ export default function Layout() {
         </header>
 
         {/* Child page content is rendered here via React Router's Outlet. */}
-        <main className="flex-1 p-6 lg:p-8">
+        <main className="flex-1 p-6 lg:p-8 isolate">
           <div key={location.pathname} className="mx-auto max-w-7xl animate-page-enter">
             <Outlet />
           </div>

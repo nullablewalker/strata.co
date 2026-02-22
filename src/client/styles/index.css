@@ -171,6 +171,20 @@
                0 0 40px rgba(212, 160, 74, 0.1);
 }
 
+/* Fix for images inside backdrop-filter / glassmorphism contexts.
+   backdrop-filter creates a new compositing layer that can prevent child
+   images from being painted in certain browsers (especially Safari/WebKit).
+   The page-enter animation (opacity + transform) also creates a compositing
+   layer that can interfere with lazy-loaded image rendering.
+   Force images into their own compositing layer so they render correctly. */
+.glass-card img,
+[class*="backdrop-blur"] img,
+.animate-page-enter img {
+  position: relative;
+  z-index: 1;
+  transform: translateZ(0);
+}
+
 /* Card depth ring — inner glow suggesting layers beneath */
 .depth-ring {
   box-shadow:
