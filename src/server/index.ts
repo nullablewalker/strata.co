@@ -17,6 +17,7 @@ import importRoutes from "./routes/import";
 import vault from "./routes/vault";
 import heatmapRoutes from "./routes/heatmap";
 import patterns from "./routes/patterns";
+import strataRoutes from "./routes/strata";
 
 const app = new Hono<{ Bindings: Env }>()
   // Request logging on all routes (non-API static asset requests included)
@@ -30,7 +31,8 @@ const app = new Hono<{ Bindings: Env }>()
   .route("/api/import", importRoutes)
   .route("/api/vault", vault)
   .route("/api/heatmap", heatmapRoutes)
-  .route("/api/patterns", patterns);
+  .route("/api/patterns", patterns)
+  .route("/api/strata", strataRoutes);
 
 // Simple liveness probe — no auth required, useful for uptime monitoring
 app.get("/api/health", (c) => c.json({ status: "ok" }));

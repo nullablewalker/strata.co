@@ -20,6 +20,7 @@ const navItems = [
   { to: "/vault", label: "The Vault" },
   { to: "/heatmap", label: "Heatmap" },
   { to: "/patterns", label: "Patterns" },
+  { to: "/era-map", label: "Era Map" },
   { to: "/import", label: "Import" },
 ];
 
