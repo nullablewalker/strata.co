@@ -49,9 +49,9 @@ function BrowserColumn({
   );
 
   return (
-    <div className="border-strata-border flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border">
+    <div className="border-white/[0.04] bg-white/[0.02] flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border">
       {/* Header */}
-      <div className="border-strata-border bg-strata-border/50 border-b px-3 py-2">
+      <div className="border-white/[0.04] bg-white/[0.03] border-b px-3 py-2">
         <span className="text-strata-slate-400 text-xs font-medium tracking-wide uppercase">
           {title}
         </span>
@@ -60,14 +60,14 @@ function BrowserColumn({
       {/* Scrollable list */}
       <div
         ref={listRef}
-        className="bg-strata-surface max-h-[200px] overflow-y-auto"
+        className="bg-white/[0.02] max-h-[200px] overflow-y-auto"
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
         {loading ? (
           <div className="space-y-1 p-2">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="bg-strata-border/50 h-6 animate-pulse rounded" />
+              <div key={i} className="bg-strata-border/50 h-6 shimmer rounded" />
             ))}
           </div>
         ) : (

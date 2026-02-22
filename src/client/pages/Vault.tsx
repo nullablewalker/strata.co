@@ -84,9 +84,9 @@ const PAGE_SIZE = 50;
 
 function StatCardSkeleton() {
   return (
-    <div className="border-strata-border bg-strata-surface rounded-lg border p-4">
-      <div className="bg-strata-border mb-2 h-3 w-20 animate-pulse rounded" />
-      <div className="bg-strata-border h-7 w-24 animate-pulse rounded" />
+    <div className="glass-card p-4">
+      <div className="bg-strata-border/50 mb-2 h-3 w-20 shimmer rounded" />
+      <div className="bg-strata-border/50 h-7 w-24 shimmer rounded" />
     </div>
   );
 }
@@ -94,15 +94,15 @@ function StatCardSkeleton() {
 function RowSkeleton() {
   return (
     <div className="border-strata-border/50 flex items-center gap-4 border-b px-4 py-3">
-      <div className="bg-strata-border h-4 w-6 animate-pulse rounded" />
-      <div className="bg-strata-border h-10 w-10 animate-pulse rounded" />
+      <div className="bg-strata-border/50 h-4 w-6 shimmer rounded" />
+      <div className="bg-strata-border/50 h-10 w-10 shimmer rounded" />
       <div className="flex-1 space-y-1.5">
-        <div className="bg-strata-border h-4 w-48 animate-pulse rounded" />
-        <div className="bg-strata-border h-3 w-32 animate-pulse rounded" />
+        <div className="bg-strata-border/50 h-4 w-48 shimmer rounded" />
+        <div className="bg-strata-border/50 h-3 w-32 shimmer rounded" />
       </div>
-      <div className="bg-strata-border h-4 w-12 animate-pulse rounded" />
-      <div className="bg-strata-border h-4 w-16 animate-pulse rounded" />
-      <div className="bg-strata-border h-4 w-16 animate-pulse rounded" />
+      <div className="bg-strata-border/50 h-4 w-12 shimmer rounded" />
+      <div className="bg-strata-border/50 h-4 w-16 shimmer rounded" />
+      <div className="bg-strata-border/50 h-4 w-16 shimmer rounded" />
     </div>
   );
 }
@@ -356,14 +356,14 @@ export default function Vault() {
             placeholder="Search tracks..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="border-strata-border bg-strata-surface placeholder-strata-slate-500 focus:border-strata-amber-500/50 w-full rounded-lg border px-3 py-1.5 text-sm text-white transition-colors outline-none sm:w-56"
+            className="border-white/[0.06] bg-white/[0.03] placeholder-strata-slate-500 focus:border-strata-amber-500/50 w-full rounded-lg border px-3 py-1.5 text-sm text-white transition-colors outline-none sm:w-56"
           />
 
           {/* Sort */}
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortOption)}
-            className="border-strata-border bg-strata-surface text-strata-slate-400 focus:border-strata-amber-500/50 rounded-lg border px-3 py-1.5 text-sm transition-colors outline-none"
+            className="border-white/[0.06] bg-white/[0.03] text-strata-slate-400 focus:border-strata-amber-500/50 rounded-lg border px-3 py-1.5 text-sm transition-colors outline-none"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -422,7 +422,7 @@ export default function Vault() {
       )}
 
       {/* Track List */}
-      <div className="border-strata-border overflow-hidden rounded-lg border">
+      <div className="border-white/[0.04] overflow-hidden rounded-lg border">
         {listLoading ? (
           <div>
             {Array.from({ length: 8 }).map((_, i) => (
@@ -465,7 +465,7 @@ export default function Vault() {
             <button
               onClick={handleLoadMore}
               disabled={loadingMore}
-              className="border-strata-border bg-strata-surface text-strata-slate-400 hover:border-strata-amber-500/50 rounded-lg border px-4 py-2 text-sm transition-colors hover:text-white disabled:opacity-50"
+              className="border-white/[0.06] bg-white/[0.03] text-strata-slate-400 hover:border-strata-amber-500/50 rounded-lg border px-4 py-2 text-sm transition-colors hover:text-white disabled:opacity-50"
             >
               {loadingMore ? "Loading..." : "Load More"}
             </button>
@@ -489,7 +489,7 @@ export default function Vault() {
 
 function StatCard({ label, value, small }: { label: string; value: string; small?: boolean }) {
   return (
-    <div className="border-strata-border bg-strata-surface rounded-lg border p-4">
+    <div className="glass-card p-4">
       <p className="text-strata-slate-500 text-xs">{label}</p>
       <p
         className={`text-strata-amber-300 mt-1 font-mono font-bold ${small ? "text-sm" : "text-xl"}`}
@@ -514,7 +514,7 @@ function TrackList({
   return (
     <div>
       {/* Header row */}
-      <div className="border-strata-border bg-strata-surface/50 text-strata-slate-500 hidden border-b px-4 py-2 text-xs font-medium sm:flex">
+      <div className="border-white/[0.04] bg-white/[0.03] text-strata-slate-500 hidden border-b px-4 py-2 text-xs font-medium sm:flex">
         <span className="w-10 text-center">#</span>
         <span className="w-12" /> {/* Album art column */}
         <span className="flex-1">Track</span>
@@ -531,7 +531,7 @@ function TrackList({
           <button
             key={`${track.trackSpotifyId}-${i}`}
             onClick={() => onTrackClick(track)}
-            className={`border-strata-border/30 hover:bg-strata-surface/50 flex w-full items-center border-b px-4 py-3 text-left transition-colors ${
+            className={`border-strata-border/30 hover:bg-white/[0.04] flex w-full items-center border-b px-4 py-3 text-left transition-colors ${
               isPlaying ? "bg-strata-amber-500/10" : ""
             }`}
           >
@@ -593,7 +593,7 @@ function PlayerBar({
   const [showEmbed, setShowEmbed] = useState(false);
 
   return (
-    <div className="border-strata-border bg-strata-surface fixed inset-x-0 bottom-0 z-50 border-t">
+    <div className="border-white/[0.06] bg-strata-bg/80 backdrop-blur-xl fixed inset-x-0 bottom-0 z-50 border-t">
       {/* Spotify embed player */}
       {showEmbed && (
         <div className="border-strata-border border-b">

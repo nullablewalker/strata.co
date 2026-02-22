@@ -360,7 +360,7 @@ export default function Heatmap() {
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Year selector */}
-        <div className="flex items-center gap-1 rounded-lg bg-strata-surface p-1">
+        <div className="flex items-center gap-1 rounded-lg bg-white/[0.05] p-1">
           {years.slice(0, 5).map((y) => (
             <button
               key={y}
@@ -398,7 +398,7 @@ export default function Heatmap() {
         <select
           value={artist}
           onChange={(e) => setArtist(e.target.value)}
-          className="rounded-lg border border-strata-border bg-strata-surface px-3 py-2 text-sm text-white outline-none"
+          className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-sm text-white outline-none"
         >
           <option value="">All Artists</option>
           {artists.map((a) => (
@@ -437,7 +437,7 @@ export default function Heatmap() {
       )}
 
       {/* Heatmap */}
-      <div className="rounded-xl border border-strata-border bg-strata-surface p-4">
+      <div className="glass-card p-4">
         {loading ? (
           <HeatmapSkeleton />
         ) : error ? (
@@ -495,7 +495,7 @@ export default function Heatmap() {
 
       {/* Day drill-down — shown when a heatmap cell is clicked */}
       {selectedDay && (
-        <div className="rounded-xl border border-strata-border bg-strata-surface p-4">
+        <div className="glass-card p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold text-white">
@@ -516,15 +516,15 @@ export default function Heatmap() {
             </button>
           </div>
           {dayLoading ? (
-            <div className="animate-pulse space-y-2">
+            <div className="shimmer space-y-2">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 py-1.5 px-2">
-                  <div className="h-4 w-12 rounded bg-strata-border" />
+                  <div className="h-4 w-12 rounded bg-strata-border/50" />
                   <div className="flex-1 space-y-1">
-                    <div className="h-4 w-48 rounded bg-strata-border" />
-                    <div className="h-3 w-32 rounded bg-strata-border" />
+                    <div className="h-4 w-48 rounded bg-strata-border/50" />
+                    <div className="h-3 w-32 rounded bg-strata-border/50" />
                   </div>
-                  <div className="h-4 w-10 rounded bg-strata-border" />
+                  <div className="h-4 w-10 rounded bg-strata-border/50" />
                 </div>
               ))}
             </div>
@@ -560,7 +560,7 @@ export default function Heatmap() {
 
       {/* Silence Map — periods of 3+ consecutive days with no plays */}
       {!loading && !error && !artist && silenceData && (
-        <div className="rounded-xl border border-zinc-800 bg-strata-surface p-5">
+        <div className="glass-card p-5">
           <h2 className="text-lg font-semibold text-zinc-300">
             沈黙の記録
           </h2>
@@ -590,7 +590,7 @@ export default function Heatmap() {
 
       {/* Obsession Curve — only shown when an artist is selected */}
       {artist && obsessionData && obsessionData.months.length > 0 && (
-        <div className="rounded-xl border border-strata-border bg-strata-surface p-4">
+        <div className="glass-card p-4">
           <div className="mb-3">
             <h2 className="text-lg font-semibold">Obsession Curve</h2>
             <p className="text-sm text-amber-300">{obsessionData.artist}</p>
@@ -848,7 +848,7 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="rounded-lg border border-strata-border bg-strata-bg p-3">
+    <div className="glass-card p-3">
       <p className="text-xs text-strata-slate-400">{label}</p>
       <p className="mt-1 text-xl font-bold text-strata-amber-300">{value}</p>
       {sub && <p className="text-xs text-strata-slate-500">{sub}</p>}
@@ -865,7 +865,7 @@ function SilenceCard({ silence }: { silence: SilencePeriod }) {
     `${d.getUTCMonth() + 1}月${d.getUTCDate()}日`;
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-strata-bg px-4 py-3">
+    <div className="border border-white/[0.04] bg-white/[0.02] rounded-lg px-4 py-3">
       {/* Date range header */}
       <div className="flex items-baseline justify-between">
         <p className="text-sm text-zinc-400">
@@ -907,7 +907,7 @@ function HeatmapSkeleton() {
             {Array.from({ length: 7 }).map((_, j) => (
               <div
                 key={j}
-                className="h-3 w-3 animate-pulse rounded-sm bg-strata-border"
+                className="h-3 w-3 shimmer rounded-sm bg-strata-border/50"
               />
             ))}
           </div>

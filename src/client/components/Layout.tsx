@@ -35,6 +35,32 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen">
+      {/* Ambient gradient orbs — geological atmosphere */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div
+          className="absolute -right-32 -top-32 h-[500px] w-[500px] rounded-full opacity-[0.07]"
+          style={{
+            background: "radial-gradient(circle, #a66b1f 0%, transparent 70%)",
+            animation: "drift-1 45s ease-in-out infinite",
+          }}
+        />
+        <div
+          className="absolute -bottom-48 -left-32 h-[600px] w-[600px] rounded-full opacity-[0.05]"
+          style={{
+            background: "radial-gradient(circle, #2d4f39 0%, transparent 70%)",
+            animation: "drift-2 55s ease-in-out infinite",
+          }}
+        />
+        <div
+          className="absolute left-1/2 top-1/2 h-[400px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.04]"
+          style={{
+            background: "radial-gradient(circle, #8b3a1f 0%, transparent 70%)",
+            animation: "drift-1 60s ease-in-out infinite reverse",
+          }}
+        />
+        <div className="noise-overlay absolute inset-0" />
+      </div>
+
       {/* Semi-transparent backdrop — closes sidebar on tap (mobile only). */}
       {sidebarOpen && (
         <div
@@ -46,7 +72,7 @@ export default function Layout() {
       {/* Sidebar — fixed+off-screen on mobile, static on desktop.
           The translate-x transition provides a smooth slide-in animation. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-strata-border bg-strata-surface transition-transform lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-white/[0.06] bg-strata-surface/80 backdrop-blur-xl transition-transform lg:static lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -114,7 +140,7 @@ export default function Layout() {
       <div className="flex flex-1 flex-col">
         {/* Mobile-only top bar with hamburger menu — hidden on desktop
             where the sidebar is always visible. */}
-        <header className="flex h-14 items-center border-b border-strata-border px-4 lg:hidden">
+        <header className="flex h-14 items-center border-b border-white/[0.06] bg-strata-bg/80 backdrop-blur-xl px-4 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
             className="text-strata-slate-400 hover:text-white"
@@ -139,7 +165,7 @@ export default function Layout() {
         </header>
 
         {/* Child page content is rendered here via React Router's Outlet. */}
-        <main className="flex-1 p-6 lg:p-8">
+        <main className="mx-auto max-w-7xl flex-1 p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

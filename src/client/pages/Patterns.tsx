@@ -88,7 +88,7 @@ function OverviewCards({ data }: { data: OverviewData }) {
   return (
     <div className="space-y-6">
       {/* Listener type - large badge */}
-      <div className="flex items-center justify-center rounded-xl bg-strata-surface p-8 border border-strata-border">
+      <div className="flex items-center justify-center glass-card p-8">
         <span className="text-4xl font-bold text-strata-amber-300">
           {data.listenerType}
         </span>
@@ -126,7 +126,7 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="rounded-lg bg-strata-surface p-4 border border-strata-border">
+    <div className="glass-card p-4">
       <p className="text-xs text-strata-slate-500">{label}</p>
       <p className="mt-1 text-2xl font-bold text-strata-amber-300">{value}</p>
       {sub && (
@@ -522,19 +522,19 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
 
 function ChartSkeleton() {
   return (
-    <div className="h-[300px] animate-pulse rounded-lg bg-strata-surface" />
+    <div className="h-[300px] shimmer rounded-lg bg-strata-border/50" />
   );
 }
 
 function OverviewSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="h-24 animate-pulse rounded-xl bg-strata-surface" />
+      <div className="h-24 shimmer rounded-xl bg-strata-border/50" />
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-20 animate-pulse rounded-lg bg-strata-surface"
+            className="h-20 shimmer rounded-lg bg-strata-border/50"
           />
         ))}
       </div>
@@ -694,7 +694,7 @@ export default function Patterns() {
           <select
             value={selectedYear}
             onChange={(e) => handleYearChange(e.target.value)}
-            className="rounded-lg border border-strata-border bg-strata-surface px-3 py-1.5 text-sm text-white focus:border-strata-amber-500 focus:outline-none"
+            className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-sm text-white focus:border-strata-amber-500 focus:outline-none"
           >
             <option value="">すべて</option>
             {(overview?.availableYears ?? []).map((y) => (
@@ -751,7 +751,7 @@ export default function Patterns() {
 
       {/* Empty state */}
       {!loading && !error && !hasData && (
-        <div className="rounded-lg border border-strata-border bg-strata-surface p-12 text-center">
+        <div className="glass-card p-12 text-center">
           <p className="text-lg text-strata-slate-400">
             データがありません
           </p>
@@ -826,7 +826,7 @@ function TimeArtistsSection({ data }: { data: TimeArtistsData }) {
           return (
             <div
               key={key}
-              className="rounded-lg border border-strata-border bg-strata-bg p-4"
+              className="glass-card p-4"
             >
               <div className="mb-3">
                 <p className="text-sm font-semibold text-white">
@@ -880,7 +880,7 @@ function ChartSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-strata-border bg-strata-surface p-6">
+    <div className="glass-card p-6">
       <h2 className="mb-4 text-lg font-semibold text-strata-slate-400">
         {title}
       </h2>
