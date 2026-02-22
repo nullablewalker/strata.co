@@ -208,4 +208,21 @@ importRoutes.get("/status", async (c) => {
   return c.json({ data: result });
 });
 
+/**
+ * Deletes all imported listening history for the authenticated user.
+ * Returns the number of rows removed so the frontend can confirm the operation.
+ */
+importRoutes.delete("/data", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+
+  const db = createDb(c.env.DATABASE_URL);
+
+  const result = await db
+    .delete(listeningHistory)
+    .where(eq(listeningHistory.userId, userId));
+
+  return c.json({ data: { deleted: result.rowCount } });
+});
+
 export default importRoutes;
