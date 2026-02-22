@@ -18,17 +18,22 @@ Spotifyの再生履歴を時間軸で深掘りし、「熱量の地層」とし�
 
 企画書: `docs/PROJECT_PROPOSAL.md`
 
-### MVPスコープ（実装済み）
+### 実装済み機能
 
-1. Spotify OAuth認証 + メタデータ取得（ジャケット画像、ジャンル等）
+1. Spotify OAuth認証 + メタデータ取得（ジャケット画像等）
 2. Spotify Extended Streaming History（JSON / ZIP）インポート・パース
-3. The Vault — 3カラムブラウザ（Genre/Artist/Album）、アルバムアート、Spotify Embedプレイヤー
+3. The Vault — 2カラムブラウザ（Artist/Album）、アルバムアート、Spotify Embedプレイヤー
 4. Fandom Heatmap — アーティスト別再生頻度の時間軸可視化（GitHub草スタイル）
-5. Listening Patterns — 時間帯・曜日・季節別の再生傾向 + 3カラムブラウザ
+5. Listening Patterns — 時間帯・曜日・季節別の再生傾向、デバイス分析、シャッフル分析
+6. Era Map — D3.js streamgraphによるアーティスト変遷の可視化
+7. Listening Autobiography — 再生履歴から自動生成する音楽的自伝
+8. Mosaic — 月別トップアルバムのアートワーク・タイムライン
+9. Export — 年間サマリーの閲覧・エクスポート
+10. Dashboard — Time Capsule、Dormant Artists、Drift Report等の統合ビュー
 
-### MVP除外（後続フェーズ）
+### 未実装（後続フェーズ）
 
-- Continuous Scrobbling、BPM/キー音響データ、Sonic Lineage、Time Capsule、Beautiful Noise
+- Continuous Scrobbling、BPM/キー音響データ、Sonic Lineage、Beautiful Noise
 
 ## 技術スタック
 
@@ -89,23 +94,30 @@ src/
 │   ├── components/
 │   │   ├── Layout.tsx         # サイドバーナビ + レスポンシブ対応
 │   │   ├── ProtectedRoute.tsx # 認証ガード
-│   │   └── ColumnBrowser.tsx  # Swinsian風3カラムブラウザ (共有)
+│   │   ├── ColumnBrowser.tsx  # 2カラムブラウザ (Artist/Album)
+│   │   ├── ConfirmDialog.tsx  # 確認ダイアログ
+│   │   └── Toast.tsx          # トースト通知システム
 │   ├── pages/
-│   │   ├── Dashboard.tsx      # ダッシュボード（統計 or インポート誘導）
+│   │   ├── Dashboard.tsx      # ダッシュボード（統計 + Time Capsule等）
 │   │   ├── Import.tsx         # JSON/ZIPインポート
 │   │   ├── Vault.tsx          # 楽曲一覧 + プレイヤー
 │   │   ├── Heatmap.tsx        # D3.js Fandom Heatmap
-│   │   └── Patterns.tsx       # D3.js リスニングパターン
+│   │   ├── Patterns.tsx       # D3.js リスニングパターン
+│   │   ├── EraMap.tsx         # D3.js streamgraph（アーティスト変遷）
+│   │   ├── Autobiography.tsx  # 音楽的自伝（ナラティブ生成）
+│   │   ├── Mosaic.tsx         # 月別アルバムアート・タイムライン
+│   │   └── Export.tsx         # 年間サマリー・エクスポート
 │   └── styles/index.css       # Tailwind v4テーマ定義 (@theme)
 ├── server/                    # Hono API
 │   ├── index.ts               # Honoエントリ、ルートマウント
 │   ├── middleware/session.ts  # セッション管理 + authGuardミドルウェア
 │   ├── routes/
 │   │   ├── auth.ts            # Spotify OAuth (login/callback/me/logout)
-│   │   ├── import.ts          # 再生履歴インポート (POST /history, GET /status)
-│   │   ├── vault.ts           # Vault API (tracks/artists/albums/genres/metadata/stats)
+│   │   ├── import.ts          # 再生履歴インポート (POST /history, GET /status, DELETE /data)
+│   │   ├── vault.ts           # Vault API (tracks/artists/albums/metadata/stats/autobiography/mosaic/time-capsule/dormant-artists/drift-report/annual-summary)
 │   │   ├── heatmap.ts         # Heatmap API (data/artists/summary)
-│   │   └── patterns.ts        # Patterns API (hourly/weekly/monthly/overview/artists/albums)
+│   │   ├── patterns.ts        # Patterns API (hourly/weekly/monthly/overview/time-artists/devices/shuffle)
+│   │   └── strata.ts          # Era Map API (eras — streamgraph用月別アーティストデータ)
 │   ├── db/
 │   │   ├── index.ts           # createDb() ファクトリ (neon-http)
 │   │   └── schema.ts          # Drizzleスキーマ (users, listening_history)
@@ -126,10 +138,11 @@ src/
 ## APIエンドポイント
 
 - `/api/auth/*` — Spotify OAuth (login, callback, me, logout)
-- `/api/import/*` — 再生履歴インポート (POST /history, GET /status)
-- `/api/vault/*` — Vault (tracks, artists, albums, genres, metadata, stats)
+- `/api/import/*` — 再生履歴インポート (POST /history, GET /status, DELETE /data)
+- `/api/vault/*` — Vault (tracks, artists, albums, metadata, stats, autobiography, mosaic, time-capsule, dormant-artists, drift-report, annual-summary)
 - `/api/heatmap/*` — Heatmap (data, artists, summary)
-- `/api/patterns/*` — Patterns (hourly, weekly, monthly, overview, artists, albums)
+- `/api/patterns/*` — Patterns (hourly, weekly, monthly, overview, time-artists, devices, shuffle)
+- `/api/strata/*` — Era Map (eras — streamgraph用月別データ)
 - `/api/health` — ヘルスチェック
 
 ## デザイン方針
@@ -142,7 +155,8 @@ src/
 
 ## 技術的制約
 
-- Spotify Audio Features APIは一般開発者アクセス制限済み（2024年〜）。MVPではBPM/キーは扱わない
+- Spotify Audio Features APIは一般開発者アクセス制限済み（2024年〜）。BPM/キーは扱わない
+- Spotify開発モードではバッチAPI（`GET /v1/tracks?ids=`）が403制限。単体エンドポイント（`GET /v1/tracks/{id}`）を使用
 - Spotify APIのレート制限あり。メタデータはサーバーサイドキャッシュ必須
 - 25ユーザー超でExtended Quota Mode申請が必要
 - 楽曲メタデータのローカル永続保存はSpotify利用規約で制限あり。APIからの都度取得またはサーバーキャッシュで対応
