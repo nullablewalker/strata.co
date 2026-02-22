@@ -580,12 +580,13 @@ vault.get("/time-capsule", async (c) => {
 
     const tracks = await db
       .select({
+        trackSpotifyId: listeningHistory.trackSpotifyId,
         trackName: listeningHistory.trackName,
         artistName: listeningHistory.artistName,
         albumName: listeningHistory.albumName,
-        trackSpotifyId: listeningHistory.trackSpotifyId,
-        msPlayed: listeningHistory.msPlayed,
-        playedAt: listeningHistory.playedAt,
+        totalMsPlayed: sql<number>`sum(${listeningHistory.msPlayed})`.mapWith(Number),
+        firstPlayedAt: sql<string>`min(${listeningHistory.playedAt})`,
+        playCount: sql<number>`count(*)`.mapWith(Number),
       })
       .from(listeningHistory)
       .where(
@@ -595,7 +596,13 @@ vault.get("/time-capsule", async (c) => {
           lte(listeningHistory.playedAt, dayEnd)
         )
       )
-      .orderBy(listeningHistory.playedAt)
+      .groupBy(
+        listeningHistory.trackSpotifyId,
+        listeningHistory.trackName,
+        listeningHistory.artistName,
+        listeningHistory.albumName
+      )
+      .orderBy(sql`min(${listeningHistory.playedAt})`)
       .limit(20);
 
     if (tracks.length > 0) {

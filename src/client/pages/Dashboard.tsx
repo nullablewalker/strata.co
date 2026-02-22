@@ -25,8 +25,9 @@ interface TimeCapsuleTrack {
   artistName: string;
   albumName: string | null;
   trackSpotifyId: string;
-  msPlayed: number;
-  playedAt: string;
+  totalMsPlayed: number;
+  firstPlayedAt: string;
+  playCount: number;
 }
 
 interface TimeCapsuleYear {
@@ -87,34 +88,55 @@ export default function Dashboard() {
   // Fetch vault stats on mount to determine whether the user has any data.
   // If the request fails (e.g. no history yet), we treat it as "no data"
   // and show the import CTA instead of an error message.
+  //
+  // The `ignore` flag + AbortController handle React 19 StrictMode, which
+  // double-fires effects in development.  Without cleanup the first
+  // (stale) mount's fetch results would still call setState, causing the
+  // Time Capsule section to appear duplicated.
   useEffect(() => {
-    apiFetch<ApiResponse<VaultStats>>("/vault/stats")
+    let ignore = false;
+    const controller = new AbortController();
+
+    apiFetch<ApiResponse<VaultStats>>("/vault/stats", { signal: controller.signal })
       .then((res) => {
+        if (ignore) return;
         setStats(res.data);
         setHasHistory(res.data.totalTracks > 0);
 
         // Only fetch dormant artists if user has listening data
         if (res.data.totalTracks > 0) {
-          apiFetch<ApiResponse<DormantArtist[]>>("/vault/dormant-artists")
-            .then((dormantRes) => setDormantArtists(dormantRes.data))
+          apiFetch<ApiResponse<DormantArtist[]>>("/vault/dormant-artists", { signal: controller.signal })
+            .then((dormantRes) => {
+              if (ignore) return;
+              setDormantArtists(dormantRes.data);
+            })
             .catch(() => {
               // Silently ignore — section simply won't render
             });
         }
       })
       .catch(() => {
+        if (ignore) return;
         setHasHistory(false);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
 
     // Fetch time capsule data independently
-    apiFetch<ApiResponse<TimeCapsuleYear[]>>("/vault/time-capsule")
+    apiFetch<ApiResponse<TimeCapsuleYear[]>>("/vault/time-capsule", { signal: controller.signal })
       .then((res) => {
+        if (ignore) return;
         setCapsules(res.data);
       })
       .catch(() => {
         // Silently ignore — capsule is optional
       });
+
+    return () => {
+      ignore = true;
+      controller.abort();
+    };
   }, []);
 
   // Fetch drift report only when we know the user has data
@@ -249,6 +271,11 @@ function TimeCapsuleCard({ capsule }: { capsule: TimeCapsuleYear }) {
         {displayTracks.map((t, i) => (
           <li key={`${t.trackSpotifyId}-${i}`} className="leading-tight">
             <span className="text-sm text-white">{t.trackName}</span>
+            {t.playCount > 1 && (
+              <span className="ml-1 inline-block rounded-full bg-strata-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium leading-none text-strata-amber-300">
+                x{t.playCount}
+              </span>
+            )}
             <span className="ml-1.5 text-xs text-zinc-400">
               {t.artistName}
             </span>
