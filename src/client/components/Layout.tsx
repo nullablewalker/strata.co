@@ -24,6 +24,7 @@ const navItems = [
   { to: "/era-map", label: "Era Map" },
   { to: "/autobiography", label: "Autobiography" },
   { to: "/mosaic", label: "Mosaic" },
+  { to: "/export", label: "Export" },
   { to: "/import", label: "Import" },
 ];
 

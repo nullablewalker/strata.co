@@ -25,6 +25,7 @@ import EraMap from "./pages/EraMap";
 import Mosaic from "./pages/Mosaic";
 import Import from "./pages/Import";
 import Autobiography from "./pages/Autobiography";
+import Export from "./pages/Export";
 
 /**
  * Landing page — the only public route.
@@ -91,6 +92,7 @@ export default function App() {
           <Route path="/mosaic" element={<Mosaic />} />
           <Route path="/import" element={<Import />} />
           <Route path="/autobiography" element={<Autobiography />} />
+          <Route path="/export" element={<Export />} />
         </Route>
       </Routes>
     </AuthProvider>
