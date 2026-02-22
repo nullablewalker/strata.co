@@ -16,7 +16,7 @@ import type { ApiResponse } from "../../shared/types";
 interface VaultStats {
   totalTracks: number;
   totalArtists: number;
-  totalHours: number;
+  totalMsPlayed: number;
 }
 
 export default function Dashboard() {
@@ -64,7 +64,7 @@ export default function Dashboard() {
             <StatsCard label="Artists" value={stats!.totalArtists.toLocaleString()} />
             <StatsCard
               label="Hours Listened"
-              value={stats!.totalHours.toLocaleString()}
+              value={Math.floor(stats!.totalMsPlayed / 3_600_000).toLocaleString()}
             />
           </div>
 
