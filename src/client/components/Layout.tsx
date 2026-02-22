@@ -21,6 +21,7 @@ const navItems = [
   { to: "/heatmap", label: "Heatmap" },
   { to: "/patterns", label: "Patterns" },
   { to: "/rankings", label: "Rankings" },
+  { to: "/mosaic", label: "Mosaic" },
   { to: "/import", label: "Import" },
 ];
 

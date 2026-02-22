@@ -20,6 +20,7 @@ import Vault from "./pages/Vault";
 import Heatmap from "./pages/Heatmap";
 import Patterns from "./pages/Patterns";
 import BumpChart from "./pages/BumpChart";
+import Mosaic from "./pages/Mosaic";
 import Import from "./pages/Import";
 
 /**
@@ -83,6 +84,7 @@ export default function App() {
           <Route path="/heatmap" element={<Heatmap />} />
           <Route path="/patterns" element={<Patterns />} />
           <Route path="/rankings" element={<BumpChart />} />
+          <Route path="/mosaic" element={<Mosaic />} />
           <Route path="/import" element={<Import />} />
         </Route>
       </Routes>

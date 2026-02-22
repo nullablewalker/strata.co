@@ -327,6 +327,57 @@ vault.get("/metadata", async (c) => {
   return c.json({ data: result });
 });
 
+// --- Mosaic (monthly top albums) ---
+
+vault.get("/mosaic", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const db = createDb(c.env.DATABASE_URL);
+
+  // Get monthly top albums (top 6 per month by play count)
+  const monthlyAlbums = await db
+    .select({
+      month: sql<string>`to_char(${listeningHistory.playedAt}, 'YYYY-MM')`.as("month"),
+      albumName: listeningHistory.albumName,
+      artistName: listeningHistory.artistName,
+      playCount: sql<number>`count(*)`.as("playCount"),
+      msPlayed: sql<number>`sum(${listeningHistory.msPlayed})`.as("msPlayed"),
+      trackSpotifyId: sql<string>`(array_agg(${listeningHistory.trackSpotifyId}))[1]`.as(
+        "trackSpotifyId",
+      ),
+    })
+    .from(listeningHistory)
+    .where(
+      and(
+        eq(listeningHistory.userId, userId),
+        sql`${listeningHistory.albumName} IS NOT NULL AND ${listeningHistory.albumName} != ''`,
+      ),
+    )
+    .groupBy(
+      sql`to_char(${listeningHistory.playedAt}, 'YYYY-MM')`,
+      listeningHistory.albumName,
+      listeningHistory.artistName,
+    )
+    .orderBy(
+      sql`to_char(${listeningHistory.playedAt}, 'YYYY-MM')`,
+      sql`count(*) desc`,
+    );
+
+  // Group by month, take top 6 per month
+  const monthMap = new Map<string, (typeof monthlyAlbums)[number][]>();
+  for (const row of monthlyAlbums) {
+    if (!monthMap.has(row.month)) monthMap.set(row.month, []);
+    const arr = monthMap.get(row.month)!;
+    if (arr.length < 6) arr.push(row);
+  }
+
+  const months = Array.from(monthMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, albums]) => ({ month, albums }));
+
+  return c.json({ data: months });
+});
+
 // --- Stats ---
 
 vault.get("/stats", async (c) => {
