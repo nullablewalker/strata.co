@@ -1,3 +1,16 @@
+/**
+ * Extended Streaming History Import Routes
+ *
+ * Handles ingestion of Spotify's "Extended Streaming History" JSON export.
+ * Users request this data from Spotify's privacy settings — it arrives as
+ * one or more JSON files containing every play event in their account history.
+ *
+ * Endpoints:
+ *   POST /api/import/history - Parse, validate, deduplicate, and insert play records
+ *   GET  /api/import/status  - Check how much data the user has imported so far
+ *
+ * All routes require authentication.
+ */
 import { Hono } from "hono";
 import { count, eq, max, min } from "drizzle-orm";
 import type { Session } from "hono-sessions";
@@ -16,13 +29,16 @@ const importRoutes = new Hono<{ Bindings: Env }>();
 // All import routes require authentication
 importRoutes.use("*", authGuard());
 
-// Extract Spotify track ID from URI like "spotify:track:6rqhFgbbKwnb9MLmUQDhG6"
+// Extract the track ID portion from a Spotify URI (e.g., "spotify:track:6rqhF..." -> "6rqhF...")
 function extractTrackId(uri: string): string | null {
   const match = uri.match(/^spotify:track:([a-zA-Z0-9]+)$/);
   return match ? match[1] : null;
 }
 
+// Insert rows in batches to avoid oversized SQL statements and Neon request limits
 const BATCH_SIZE = 500;
+// Plays under 30 seconds are likely skips or accidental plays — not meaningful listens.
+// This threshold keeps the Vault and Heatmap data focused on intentional engagement.
 const MIN_MS_PLAYED = 30_000;
 
 importRoutes.post("/history", async (c) => {
@@ -36,6 +52,8 @@ importRoutes.post("/history", async (c) => {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
 
+  // Validate the incoming array against Spotify's Extended Streaming History schema.
+  // Zod strips unknown fields and coerces types; invalid files fail fast here.
   const parsed = streamingHistorySchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "Invalid streaming history format" }, 400);
@@ -46,7 +64,9 @@ importRoutes.post("/history", async (c) => {
   let skipped = 0;
   let duplicates = 0;
 
-  // Filter and transform entries
+  // --- Phase 1: Filter & Transform ---
+  // Each entry must have sufficient play time, a track name, a valid Spotify URI,
+  // and an artist name. Entries missing any of these are not usable for analytics.
   const validRows: Array<{
     userId: string;
     trackSpotifyId: string;
@@ -59,7 +79,7 @@ importRoutes.post("/history", async (c) => {
   }> = [];
 
   for (const entry of entries) {
-    // Skip short plays
+    // Skip short plays — under 30s is not an intentional listen
     if (entry.ms_played < MIN_MS_PLAYED) {
       skipped++;
       continue;
@@ -103,8 +123,13 @@ importRoutes.post("/history", async (c) => {
 
   const db = createDb(c.env.DATABASE_URL);
 
-  // Deduplicate against existing records
-  // Build a set of existing (trackSpotifyId, playedAt) for this user
+  // --- Phase 2: Deduplicate against existing records ---
+  // Users may re-upload the same file or upload overlapping files.
+  // We build an in-memory set of (trackSpotifyId, playedAt) pairs already
+  // in the DB, then filter out any incoming rows that match.
+  // This is an application-level dedup rather than a DB unique constraint
+  // because a user can legitimately play the same track multiple times
+  // in a day — the timestamp makes each play event unique.
   const existingRecords = await db
     .select({
       trackSpotifyId: listeningHistory.trackSpotifyId,
@@ -128,7 +153,8 @@ importRoutes.post("/history", async (c) => {
     return true;
   });
 
-  // Batch insert
+  // --- Phase 3: Batch insert ---
+  // Insert in chunks to stay within Neon's per-statement size limits
   for (let i = 0; i < newRows.length; i += BATCH_SIZE) {
     const batch = newRows.slice(i, i + BATCH_SIZE);
     await db.insert(listeningHistory).values(batch);
@@ -144,6 +170,11 @@ importRoutes.post("/history", async (c) => {
   return c.json({ data: result });
 });
 
+/**
+ * Returns a summary of the user's imported data: total play count
+ * and the date range covered. Used by the frontend to show import
+ * status and decide whether to prompt for a first-time upload.
+ */
 importRoutes.get("/status", async (c) => {
   const session = c.get("session") as Session<SessionData>;
   const userId = session.get("userId")!;

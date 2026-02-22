@@ -1,3 +1,12 @@
+/**
+ * Dashboard page — the first screen users see after login.
+ *
+ * Adapts its content based on whether the user has imported any listening data:
+ *   - With data: shows summary stats (tracks, artists, hours) and quick-nav
+ *     cards linking to Vault, Heatmap, and Patterns.
+ *   - Without data: shows a single call-to-action pointing to the Import page
+ *     so new users have a clear next step.
+ */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
@@ -13,9 +22,14 @@ interface VaultStats {
 export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState<VaultStats | null>(null);
+  // null = unknown (loading), true/false = resolved.
+  // This three-state approach prevents flashing the wrong UI during fetch.
   const [hasHistory, setHasHistory] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Fetch vault stats on mount to determine whether the user has any data.
+  // If the request fails (e.g. no history yet), we treat it as "no data"
+  // and show the import CTA instead of an error message.
   useEffect(() => {
     apiFetch<ApiResponse<VaultStats>>("/vault/stats")
       .then((res) => {
@@ -82,6 +96,7 @@ export default function Dashboard() {
   );
 }
 
+/** Compact metric display card used in the stats grid. */
 function StatsCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-strata-border bg-strata-surface p-5">
@@ -91,6 +106,7 @@ function StatsCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Navigation card linking to a feature page, with a hover highlight. */
 function QuickLink({
   to,
   title,

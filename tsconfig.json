@@ -1,25 +1,35 @@
 {
+  // Main TypeScript configuration for the full application (client + server + shared).
+  // Vite handles the actual bundling — TypeScript is used only for type-checking (noEmit).
   "compilerOptions": {
     "target": "ES2022",
+    // DOM libs are needed for the React client; ES2022 covers server-side APIs.
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
+    // "bundler" resolution aligns with Vite's module resolution behavior.
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
+    // Skip type-checking node_modules — speeds up checks and avoids third-party type conflicts.
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    // Required by Vite — ensures each file can be transpiled independently.
     "isolatedModules": true,
+    // Vite does the emit; TypeScript is only for type-checking.
     "noEmit": true,
+    // Catch dead code early during development.
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    // Path aliases — must stay in sync with the `resolve.alias` entries in vite.config.ts.
     "paths": {
       "@/*": ["./src/*"],
       "@client/*": ["./src/client/*"],
       "@server/*": ["./src/server/*"],
       "@shared/*": ["./src/shared/*"]
     },
+    // Cloudflare Workers types for server code; vite/client for import.meta.env and asset imports.
     "types": ["@cloudflare/workers-types", "vite/client"]
   },
   "include": ["src"],

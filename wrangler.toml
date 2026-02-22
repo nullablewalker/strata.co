@@ -1,6 +1,15 @@
+# Cloudflare Pages project configuration.
+# Secrets (DATABASE_URL, SPOTIFY_CLIENT_ID, etc.) are set via the Cloudflare
+# dashboard or `wrangler pages secret put`, NOT in this file.
+
 name = "strata-co"
-pages_build_output_dir = "./dist"
+pages_build_output_dir = "./dist"  # Must match Vite's outDir — contains SPA assets + _worker.js
+
+# Workers runtime version pin. Moving this forward may unlock new APIs but
+# could also introduce breaking changes — update deliberately.
 compatibility_date = "2026-02-20"
+
+# Required for packages that use Node built-ins (e.g., the neon serverless driver).
 compatibility_flags = ["nodejs_compat"]
 
 [vars]

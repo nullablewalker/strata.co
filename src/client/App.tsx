@@ -1,3 +1,16 @@
+/**
+ * Root application component — owns routing and the authentication boundary.
+ *
+ * Route structure:
+ *   /           → Landing (public, redirects to /dashboard if already authed)
+ *   /dashboard  → Dashboard   ┐
+ *   /vault      → The Vault   │ All wrapped in ProtectedRoute + Layout
+ *   /heatmap    → Heatmap     │ (requires Spotify auth, renders sidebar shell)
+ *   /patterns   → Patterns    │
+ *   /import     → Import      ┘
+ *
+ * AuthProvider sits at the top so every descendant can call useAuth().
+ */
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -8,9 +21,17 @@ import Heatmap from "./pages/Heatmap";
 import Patterns from "./pages/Patterns";
 import Import from "./pages/Import";
 
+/**
+ * Landing page — the only public route.
+ * Shows a branded hero with a Spotify login CTA. If the user is already
+ * authenticated (session cookie valid), they are silently redirected to
+ * /dashboard so they never see this page unnecessarily.
+ */
 function Landing() {
   const { isAuthenticated, isLoading } = useAuth();
 
+  // Wait for the /auth/me check to resolve before deciding what to render,
+  // otherwise we would briefly flash the login page for returning users.
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -23,6 +44,9 @@ function Landing() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  // Login link points to the server-side OAuth route (Arctic / Spotify flow).
+  // This is a full-page navigation, not an SPA transition, because the server
+  // needs to redirect the browser to Spotify's authorization endpoint.
   return (
     <div className="flex min-h-screen flex-col items-center justify-center">
       <h1 className="text-4xl font-bold text-strata-amber-300">Strata</h1>
@@ -44,6 +68,8 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<Landing />} />
+        {/* Layout route: ProtectedRoute enforces auth, Layout provides the
+            sidebar shell with an <Outlet /> for child pages. */}
         <Route
           element={
             <ProtectedRoute>

@@ -1,3 +1,15 @@
+/**
+ * Fandom Heatmap page — GitHub-contribution-graph-style visualization of
+ * daily listening intensity across a calendar year.
+ *
+ * Renders a D3.js SVG grid where each cell represents one day, colored by
+ * play count using a warm-tone palette (beige to deep amber to rust). The
+ * chart supports year selection and per-artist filtering, plus a tooltip
+ * showing exact play count and listening time on hover.
+ *
+ * Layout: 7 rows (Sun-Sat) x ~52 columns (weeks), with month and day-of-week
+ * labels, matching the familiar GitHub "grass" contribution graph.
+ */
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import { apiFetch } from "../lib/api";
@@ -21,16 +33,23 @@ interface HeatmapSummary {
   averageDailyPlays: number;
 }
 
+// --- Chart layout constants ---
+// Each day is a small square; CELL_STEP includes the gap between cells.
 const CELL_SIZE = 12;
 const CELL_GAP = 2;
 const CELL_STEP = CELL_SIZE + CELL_GAP;
+// Extra space around the grid for axis labels.
 const MARGIN = { top: 24, right: 16, bottom: 8, left: 32 };
+// Only odd-indexed days (Mon, Wed, Fri) get labels to avoid crowding.
 const DAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
 const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
+// Warm-tone heat palette — from dark background (no plays) through pale
+// beige, amber, to deep rust-brown (highest intensity). Designed to evoke
+// geological strata layers, matching the app's visual identity.
 const HEAT_COLORS = [
   "#1a1a1a", // heat-0: no plays
   "#fdf8ef", // heat-1
@@ -59,6 +78,8 @@ function formatMinutes(ms: number): string {
 }
 
 export default function Heatmap() {
+  // Refs for imperative D3 rendering (D3 manages the SVG DOM directly,
+  // outside of React's virtual DOM).
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -70,18 +91,22 @@ export default function Heatmap() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Available years (current year back to 2010)
+  // Generate a descending year list (current year → 2010) for the selector.
+  // Most users care about recent years, so the first 5 are shown as buttons
+  // and older years are tucked into a "More" dropdown.
   const currentYear = new Date().getUTCFullYear();
   const years = Array.from({ length: currentYear - 2009 }, (_, i) => currentYear - i);
 
-  // Fetch artists list once
+  // Fetch the full artist list once on mount to populate the filter dropdown.
+  // This is a lightweight call that returns just names + total plays.
   useEffect(() => {
     apiFetch<{ data: HeatmapArtist[] }>("/heatmap/artists")
       .then((res) => setArtists(res.data))
       .catch(() => {});
   }, []);
 
-  // Fetch heatmap data and summary when year/artist changes
+  // Fetch day-by-day heatmap data and summary stats whenever the user
+  // changes the year or artist filter. Both requests are fired in parallel.
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -102,17 +127,23 @@ export default function Heatmap() {
       .finally(() => setLoading(false));
   }, [year, artist]);
 
-  // Render D3 heatmap
+  // --- D3 heatmap rendering ---
+  // This callback imperatively builds the SVG grid. It is called via useEffect
+  // whenever the data or year changes. D3 manages the SVG directly because the
+  // grid can contain 365+ rect elements, and D3's data-join is more efficient
+  // than React's reconciliation for this kind of bulk SVG generation.
   const renderHeatmap = useCallback(() => {
     const svg = d3.select(svgRef.current);
+    // Clear previous render before rebuilding (simpler than diffing).
     svg.selectAll("*").remove();
 
     if (!data || data.length === 0) return;
 
-    // Build a map from date string to data
+    // Index API data by date string for O(1) lookups while building the grid.
     const dataMap = new Map(data.map((d) => [d.date, d]));
 
-    // Build array of all days in the year
+    // Build a full calendar array for the selected year. For the current year,
+    // stop at today rather than showing future empty cells.
     const startDate = new Date(Date.UTC(year, 0, 1));
     const endDate = new Date(Date.UTC(year + 1, 0, 1));
     const now = new Date();
@@ -131,7 +162,9 @@ export default function Heatmap() {
       d.setUTCDate(d.getUTCDate() + 1);
     }
 
-    // Color scale - quantile based on non-zero counts
+    // Color scale — uses quantile thresholds on non-zero counts so the palette
+    // adapts to the user's actual listening range. A user who averages 5 plays/day
+    // and one who averages 50 both get a meaningful color spread.
     const nonZeroCounts = allDays.filter((d) => d.count > 0).map((d) => d.count).sort((a, b) => a - b);
     const colorScale =
       nonZeroCounts.length > 0
@@ -143,7 +176,8 @@ export default function Heatmap() {
 
     const getColor = (count: number) => (count === 0 ? HEAT_COLORS[0] : colorScale(count));
 
-    // Calculate week offset (weeks start on Sunday)
+    // Grid layout: weeks run left-to-right (columns), days-of-week top-to-bottom
+    // (rows). startDay offset ensures Jan 1 lands in the correct row.
     const startDay = startDate.getUTCDay();
     const totalWeeks = Math.ceil((allDays.length + startDay) / 7);
 
@@ -154,7 +188,7 @@ export default function Heatmap() {
 
     const g = svg.append("g").attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
 
-    // Day labels (Mon, Wed, Fri)
+    // Day-of-week labels along the left edge (only Mon, Wed, Fri to avoid clutter).
     DAY_LABELS.forEach((label, i) => {
       if (label) {
         g.append("text")
@@ -167,7 +201,7 @@ export default function Heatmap() {
       }
     });
 
-    // Month labels
+    // Month labels along the top — positioned at the week where each month begins.
     const monthPositions: { month: number; week: number }[] = [];
     let prevMonth = -1;
     allDays.forEach((day, i) => {
@@ -188,7 +222,7 @@ export default function Heatmap() {
         .text(MONTH_LABELS[month]);
     });
 
-    // Cells
+    // Day cells — one rect per day, positioned by week (column) and day-of-week (row).
     const tooltip = d3.select(tooltipRef.current);
 
     g.selectAll("rect.day")
@@ -203,6 +237,9 @@ export default function Heatmap() {
       .attr("rx", 2)
       .attr("fill", (d) => getColor(d.count))
       .style("cursor", "pointer")
+      // Tooltip follows the cursor and shows play count + listening time.
+      // Positioned via page coordinates (fixed div) rather than SVG elements
+      // to avoid clipping issues inside the scrollable container.
       .on("mouseenter", (event, d) => {
         tooltip
           .style("display", "block")
@@ -223,6 +260,7 @@ export default function Heatmap() {
       });
   }, [data, year, currentYear]);
 
+  // Trigger D3 rendering after data finishes loading without errors.
   useEffect(() => {
     if (!loading && !error) {
       renderHeatmap();
@@ -384,6 +422,7 @@ export default function Heatmap() {
   );
 }
 
+/** Summary stat card with an optional subtitle (e.g. a date below the main value). */
 function StatCard({
   label,
   value,
@@ -402,6 +441,7 @@ function StatCard({
   );
 }
 
+/** Placeholder skeleton that mimics the heatmap grid shape during loading. */
 function HeatmapSkeleton() {
   return (
     <div className="space-y-2 py-4">

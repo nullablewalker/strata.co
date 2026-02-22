@@ -1,3 +1,20 @@
+/**
+ * Listening Patterns — Temporal Analysis Routes
+ *
+ * Reveals when the user listens to music across different time dimensions:
+ * hour of day, day of week, and month of year. The frontend renders these
+ * as bar/radial charts to surface habits like "Night Owl" or "Weekend Warrior".
+ *
+ * Endpoints:
+ *   GET /api/patterns/hourly   - Play counts bucketed by hour (0-23)
+ *   GET /api/patterns/weekly   - Play counts bucketed by day of week (Sun-Sat)
+ *   GET /api/patterns/monthly  - Play counts bucketed by month (Jan-Dec)
+ *   GET /api/patterns/overview - Composite insights: peak hour, busiest day,
+ *                                favorite season, listener type, available years
+ *
+ * All endpoints support optional ?year= and ?artist= query filters.
+ * All routes require authentication.
+ */
 import { Hono } from "hono";
 import { sql, eq, and, ilike } from "drizzle-orm";
 import type { Session } from "hono-sessions";
@@ -10,11 +27,16 @@ const patterns = new Hono<{ Bindings: Env }>();
 
 patterns.use("*", authGuard());
 
-// Build WHERE conditions from session + query params
+/**
+ * Shared WHERE clause builder for all pattern endpoints.
+ * Always scopes to the authenticated user; optionally filters by
+ * year (via EXTRACT) and/or artist name (case-insensitive match).
+ */
 function buildWhere(
   userId: string,
   year?: string,
   artist?: string,
+  album?: string,
 ) {
   const lh = listeningHistory;
   const conditions = [eq(lh.userId, userId)];
@@ -26,21 +48,35 @@ function buildWhere(
   }
 
   if (artist) {
+    // Case-insensitive exact match so partial names don't bleed in
     conditions.push(ilike(lh.artistName, artist));
+  }
+
+  if (album) {
+    // Case-insensitive exact match on album name
+    conditions.push(ilike(lh.albumName, album));
   }
 
   return conditions.length === 1 ? conditions[0] : and(...conditions)!;
 }
 
+/**
+ * GET /hourly — Play distribution across 24 hours.
+ *
+ * Uses EXTRACT(HOUR FROM playedAt) to bucket plays by hour.
+ * Missing hours are zero-filled on the server so the frontend always
+ * receives a complete 0-23 array (simplifies chart rendering).
+ */
 patterns.get("/hourly", async (c) => {
   const session = c.get("session") as Session<SessionData>;
   const userId = session.get("userId")!;
   const year = c.req.query("year");
   const artist = c.req.query("artist");
+  const album = c.req.query("album");
 
   const db = createDb(c.env.DATABASE_URL);
   const lh = listeningHistory;
-  const where = buildWhere(userId, year, artist);
+  const where = buildWhere(userId, year, artist, album);
 
   const rows = await db
     .select({
@@ -53,7 +89,8 @@ patterns.get("/hourly", async (c) => {
     .groupBy(sql`EXTRACT(HOUR FROM ${lh.playedAt})`)
     .orderBy(sql`EXTRACT(HOUR FROM ${lh.playedAt})`);
 
-  // Fill missing hours with 0
+  // Zero-fill: SQL only returns hours that have data; pad the gaps so
+  // the client always gets exactly 24 entries (index = hour)
   const hourMap = new Map(rows.map((r) => [r.hour, r]));
   const data = Array.from({ length: 24 }, (_, i) => ({
     hour: i,
@@ -64,15 +101,23 @@ patterns.get("/hourly", async (c) => {
   return c.json({ data });
 });
 
+/**
+ * GET /weekly — Play distribution across days of the week.
+ *
+ * PostgreSQL's DOW: 0 = Sunday, 6 = Saturday.
+ * Day names are in Japanese to match the app's user-facing locale.
+ * Zero-filled to always return 7 entries.
+ */
 patterns.get("/weekly", async (c) => {
   const session = c.get("session") as Session<SessionData>;
   const userId = session.get("userId")!;
   const year = c.req.query("year");
   const artist = c.req.query("artist");
+  const album = c.req.query("album");
 
   const db = createDb(c.env.DATABASE_URL);
   const lh = listeningHistory;
-  const where = buildWhere(userId, year, artist);
+  const where = buildWhere(userId, year, artist, album);
 
   const dayNames = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -98,15 +143,22 @@ patterns.get("/weekly", async (c) => {
   return c.json({ data });
 });
 
+/**
+ * GET /monthly — Play distribution across 12 months.
+ *
+ * PostgreSQL's EXTRACT(MONTH ...) is 1-indexed (1 = January).
+ * Zero-filled to always return 12 entries.
+ */
 patterns.get("/monthly", async (c) => {
   const session = c.get("session") as Session<SessionData>;
   const userId = session.get("userId")!;
   const year = c.req.query("year");
   const artist = c.req.query("artist");
+  const album = c.req.query("album");
 
   const db = createDb(c.env.DATABASE_URL);
   const lh = listeningHistory;
-  const where = buildWhere(userId, year, artist);
+  const where = buildWhere(userId, year, artist, album);
 
   const monthNames = [
     "1月", "2月", "3月", "4月", "5月", "6月",
@@ -124,6 +176,7 @@ patterns.get("/monthly", async (c) => {
     .groupBy(sql`EXTRACT(MONTH FROM ${lh.playedAt})`)
     .orderBy(sql`EXTRACT(MONTH FROM ${lh.playedAt})`);
 
+  // Zero-fill: EXTRACT(MONTH) is 1-based, so map index i -> month i+1
   const monthMap = new Map(rows.map((r) => [r.month, r]));
   const data = Array.from({ length: 12 }, (_, i) => ({
     month: i + 1,
@@ -135,17 +188,29 @@ patterns.get("/monthly", async (c) => {
   return c.json({ data });
 });
 
+/**
+ * GET /overview — Composite listening personality insights.
+ *
+ * Runs multiple aggregation queries to derive:
+ *   - peakHour: the single hour of day with the most plays
+ *   - busiestDay: the day of week with the most plays
+ *   - favoriteSeason: season with the most plays (spring/summer/autumn/winter)
+ *   - listenerType: personality label based on peak hour (e.g., "Night Owl")
+ *   - averageDailyPlays: total plays / active date span
+ *   - availableYears: all years present in the user's data (for year filter)
+ */
 patterns.get("/overview", async (c) => {
   const session = c.get("session") as Session<SessionData>;
   const userId = session.get("userId")!;
   const year = c.req.query("year");
   const artist = c.req.query("artist");
+  const album = c.req.query("album");
 
   const db = createDb(c.env.DATABASE_URL);
   const lh = listeningHistory;
-  const where = buildWhere(userId, year, artist);
+  const where = buildWhere(userId, year, artist, album);
 
-  // Peak hour
+  // --- Peak hour: the hour of day with the highest play count ---
   const hourRows = await db
     .select({
       hour: sql<number>`EXTRACT(HOUR FROM ${lh.playedAt})`.mapWith(Number),
@@ -159,6 +224,7 @@ patterns.get("/overview", async (c) => {
 
   const peakHour = hourRows[0]?.hour ?? 0;
 
+  // Map hour to a Japanese time-of-day label for display
   function getHourLabel(h: number): string {
     if (h >= 0 && h <= 4) return "深夜";
     if (h >= 5 && h <= 7) return "早朝";
@@ -168,6 +234,9 @@ patterns.get("/overview", async (c) => {
     return "夜";
   }
 
+  // Classify the user's listening personality based on their peak hour.
+  // These labels are intentionally playful — they appear on the dashboard
+  // as a "listener identity" badge.
   function getListenerType(h: number): string {
     if (h >= 22 || h <= 4) return "Night Owl \u{1F989}";
     if (h >= 5 && h <= 9) return "Early Bird \u{1F426}";
@@ -175,7 +244,7 @@ patterns.get("/overview", async (c) => {
     return "Evening Listener \u{1F319}";
   }
 
-  // Busiest day
+  // --- Busiest day of week ---
   const dayRows = await db
     .select({
       day: sql<number>`EXTRACT(DOW FROM ${lh.playedAt})`.mapWith(Number),
@@ -192,7 +261,9 @@ patterns.get("/overview", async (c) => {
     ? { day: dayRows[0].day, dayName: dayNames[dayRows[0].day] }
     : { day: 0, dayName: "日" };
 
-  // Favorite season
+  // --- Favorite season ---
+  // Aggregate monthly play counts into four seasons using Japanese meteorological
+  // convention: spring = Mar-May, summer = Jun-Aug, autumn = Sep-Nov, winter = Dec-Feb
   const monthRows = await db
     .select({
       month: sql<number>`EXTRACT(MONTH FROM ${lh.playedAt})`.mapWith(Number),
@@ -214,7 +285,9 @@ patterns.get("/overview", async (c) => {
   const favoriteSeason =
     Object.entries(seasonMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "春";
 
-  // Average daily plays
+  // --- Average daily plays ---
+  // Computed over the span from the user's first play to their last play
+  // (not calendar year), so the metric reflects actual listening density.
   const [dateRange] = await db
     .select({
       totalPlays: sql<number>`count(*)`.mapWith(Number),
@@ -237,7 +310,9 @@ patterns.get("/overview", async (c) => {
     averageDailyPlays = Math.round(dateRange.totalPlays / days);
   }
 
-  // Available years for the filter
+  // --- Available years ---
+  // Query is intentionally unfiltered by year/artist so the dropdown
+  // always shows all years the user has data for
   const yearRows = await db
     .select({
       year: sql<number>`EXTRACT(YEAR FROM ${lh.playedAt})`.mapWith(Number),
@@ -259,6 +334,69 @@ patterns.get("/overview", async (c) => {
       listenerType: getListenerType(peakHour),
       availableYears: yearRows.map((r) => r.year),
     },
+  });
+});
+
+/**
+ * GET /artists — Distinct artist names from the user's listening history.
+ *
+ * Sorted by total play count descending so the most-listened artists appear
+ * first in the column browser. Supports optional year filter.
+ */
+patterns.get("/artists", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const year = c.req.query("year");
+
+  const db = createDb(c.env.DATABASE_URL);
+  const lh = listeningHistory;
+  const where = buildWhere(userId, year);
+
+  const rows = await db
+    .select({
+      artistName: lh.artistName,
+      playCount: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(lh)
+    .where(where)
+    .groupBy(lh.artistName)
+    .orderBy(sql`count(*) DESC`);
+
+  return c.json({ data: rows.map((r) => r.artistName) });
+});
+
+/**
+ * GET /albums — Distinct album names from the user's listening history.
+ *
+ * Sorted by total play count descending. Supports optional year and artist
+ * query params so the column browser can cascade (artist selection narrows
+ * the album list).
+ */
+patterns.get("/albums", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const year = c.req.query("year");
+  const artist = c.req.query("artist");
+
+  const db = createDb(c.env.DATABASE_URL);
+  const lh = listeningHistory;
+  const where = buildWhere(userId, year, artist);
+
+  const rows = await db
+    .select({
+      albumName: lh.albumName,
+      playCount: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(lh)
+    .where(where)
+    .groupBy(lh.albumName)
+    .orderBy(sql`count(*) DESC`);
+
+  // Filter out null/empty album names
+  return c.json({
+    data: rows
+      .filter((r) => r.albumName != null && r.albumName !== "")
+      .map((r) => r.albumName!),
   });
 });
 

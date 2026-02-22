@@ -1,3 +1,17 @@
+/**
+ * Fandom Heatmap — Daily Listening Aggregation Routes
+ *
+ * Powers the GitHub-contribution-graph-style heatmap that visualizes
+ * a user's listening "intensity" across every day of a given year.
+ * Optionally filterable by artist to show per-artist fandom depth.
+ *
+ * Endpoints:
+ *   GET /api/heatmap/data    - Daily play counts & ms_played for a year
+ *   GET /api/heatmap/artists - Top 50 artists (for the artist filter dropdown)
+ *   GET /api/heatmap/summary - Year summary: streaks, most active day, avg daily plays
+ *
+ * All routes require authentication.
+ */
 import { Hono } from "hono";
 import { and, count, desc, eq, gte, lt, sql, sum } from "drizzle-orm";
 import type { Session } from "hono-sessions";
@@ -10,19 +24,27 @@ const heatmapRoutes = new Hono<{ Bindings: Env }>();
 
 heatmapRoutes.use("*", authGuard());
 
-// GET /api/heatmap/data - daily aggregated listening data
+/**
+ * GET /data — Daily aggregated listening data for a calendar year.
+ *
+ * Groups play events by UTC date, returning one row per day that has
+ * at least one play. The frontend fills in empty days as zero-intensity cells.
+ * Supports optional artist filter to drill into a single artist's heatmap.
+ */
 heatmapRoutes.get("/data", async (c) => {
   const session = c.get("session") as Session<SessionData>;
   const userId = session.get("userId")!;
 
   const artist = c.req.query("artist");
   const yearParam = c.req.query("year");
+  // Default to the current year if none specified
   const year = yearParam ? parseInt(yearParam, 10) : new Date().getUTCFullYear();
 
   if (isNaN(year) || year < 2000 || year > 2100) {
     return c.json({ error: "Invalid year" }, 400);
   }
 
+  // Use half-open interval [Jan 1 of year, Jan 1 of year+1) for clean date boundaries
   const startDate = new Date(Date.UTC(year, 0, 1));
   const endDate = new Date(Date.UTC(year + 1, 0, 1));
 
@@ -38,6 +60,8 @@ heatmapRoutes.get("/data", async (c) => {
     conditions.push(eq(listeningHistory.artistName, artist));
   }
 
+  // Aggregate by calendar date (UTC). Each row = one day with at least one play.
+  // The frontend renders these as heatmap cells with intensity based on count/msPlayed.
   const rows = await db
     .select({
       date: sql<string>`DATE(${listeningHistory.playedAt} AT TIME ZONE 'UTC')`.as("date"),
@@ -58,7 +82,12 @@ heatmapRoutes.get("/data", async (c) => {
   return c.json({ data });
 });
 
-// GET /api/heatmap/artists - top artists by total plays
+/**
+ * GET /artists — Top 50 artists by total play count.
+ * Used to populate the artist filter dropdown on the heatmap view.
+ * Not scoped to a specific year so the user can filter by any artist
+ * they have ever listened to.
+ */
 heatmapRoutes.get("/artists", async (c) => {
   const session = c.get("session") as Session<SessionData>;
   const userId = session.get("userId")!;
@@ -79,7 +108,15 @@ heatmapRoutes.get("/artists", async (c) => {
   return c.json({ data: rows });
 });
 
-// GET /api/heatmap/summary - stats for the heatmap period
+/**
+ * GET /summary — Engagement summary for a given year (optionally per-artist).
+ *
+ * Computes:
+ *   - totalPlays / activeDays — basic volume metrics
+ *   - longestStreak — consecutive days with at least one play (measures habit consistency)
+ *   - mostActiveDay — the single day with the highest play count
+ *   - averageDailyPlays — total plays divided by calendar days in the period
+ */
 heatmapRoutes.get("/summary", async (c) => {
   const session = c.get("session") as Session<SessionData>;
   const userId = session.get("userId")!;
@@ -107,7 +144,9 @@ heatmapRoutes.get("/summary", async (c) => {
     conditions.push(eq(listeningHistory.artistName, artist));
   }
 
-  // Get daily counts for streak calculation and most active day
+  // Fetch per-day counts sorted chronologically — needed for both
+  // streak calculation (requires consecutive-day detection) and
+  // finding the single most active day.
   const dailyCounts = await db
     .select({
       date: sql<string>`DATE(${listeningHistory.playedAt} AT TIME ZONE 'UTC')`.as("date"),
@@ -133,7 +172,8 @@ heatmapRoutes.get("/summary", async (c) => {
   const totalPlays = dailyCounts.reduce((sum, d) => sum + d.count, 0);
   const activeDays = dailyCounts.length;
 
-  // Calculate longest streak
+  // Streak calculation: walk through sorted dates and check if each pair
+  // of adjacent active days is exactly 1 day apart (i.e., consecutive).
   let longestStreak = 1;
   let currentStreak = 1;
   for (let i = 1; i < dailyCounts.length; i++) {
@@ -150,7 +190,7 @@ heatmapRoutes.get("/summary", async (c) => {
     }
   }
 
-  // Find most active day
+  // Find most active day (linear scan since data is already in memory)
   let mostActiveDay = { date: dailyCounts[0].date, count: dailyCounts[0].count };
   for (const d of dailyCounts) {
     if (d.count > mostActiveDay.count) {
@@ -158,13 +198,15 @@ heatmapRoutes.get("/summary", async (c) => {
     }
   }
 
-  // Days in the year (up to today if current year)
+  // For average calculation: if this is the current year, only count days
+  // up to today (not the full 365/366) to avoid deflating the average.
   const now = new Date();
   const daysInPeriod =
     now.getUTCFullYear() === year
       ? Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
       : (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 366 : 365;
 
+  // Round to 1 decimal place for display
   const averageDailyPlays = Math.round((totalPlays / daysInPeriod) * 10) / 10;
 
   return c.json({

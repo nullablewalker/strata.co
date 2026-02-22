@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../lib/api";
+import ColumnBrowser from "../components/ColumnBrowser";
 
 // --- Types ---
 
@@ -15,25 +16,26 @@ interface VaultTrack {
   lastPlayedAt: string;
 }
 
-interface VaultArtist {
-  artistName: string;
-  playCount: number;
-  uniqueTracks: number;
-  totalMsPlayed: number;
-}
-
 interface VaultStats {
   totalTracks: number;
   totalArtists: number;
   totalPlays: number;
   totalMsPlayed: number;
   dateRange: { from: string | null; to: string | null };
-  topTrack: { trackName: string; artistName: string; playCount: number } | null;
+  topTrack: {
+    trackName: string;
+    artistName: string;
+    playCount: number;
+  } | null;
   topArtist: { artistName: string; playCount: number } | null;
 }
 
+interface TrackMetadata {
+  albumArt: string;
+  albumName: string;
+}
+
 type SortOption = "plays" | "time" | "recent" | "name";
-type ViewTab = "tracks" | "artists";
 
 // --- Helpers ---
 
@@ -82,24 +84,25 @@ const PAGE_SIZE = 50;
 
 function StatCardSkeleton() {
   return (
-    <div className="rounded-lg border border-strata-border bg-strata-surface p-4">
-      <div className="mb-2 h-3 w-20 animate-pulse rounded bg-strata-border" />
-      <div className="h-7 w-24 animate-pulse rounded bg-strata-border" />
+    <div className="border-strata-border bg-strata-surface rounded-lg border p-4">
+      <div className="bg-strata-border mb-2 h-3 w-20 animate-pulse rounded" />
+      <div className="bg-strata-border h-7 w-24 animate-pulse rounded" />
     </div>
   );
 }
 
 function RowSkeleton() {
   return (
-    <div className="flex items-center gap-4 border-b border-strata-border/50 px-4 py-3">
-      <div className="h-4 w-6 animate-pulse rounded bg-strata-border" />
+    <div className="border-strata-border/50 flex items-center gap-4 border-b px-4 py-3">
+      <div className="bg-strata-border h-4 w-6 animate-pulse rounded" />
+      <div className="bg-strata-border h-10 w-10 animate-pulse rounded" />
       <div className="flex-1 space-y-1.5">
-        <div className="h-4 w-48 animate-pulse rounded bg-strata-border" />
-        <div className="h-3 w-32 animate-pulse rounded bg-strata-border" />
+        <div className="bg-strata-border h-4 w-48 animate-pulse rounded" />
+        <div className="bg-strata-border h-3 w-32 animate-pulse rounded" />
       </div>
-      <div className="h-4 w-12 animate-pulse rounded bg-strata-border" />
-      <div className="h-4 w-16 animate-pulse rounded bg-strata-border" />
-      <div className="h-4 w-16 animate-pulse rounded bg-strata-border" />
+      <div className="bg-strata-border h-4 w-12 animate-pulse rounded" />
+      <div className="bg-strata-border h-4 w-16 animate-pulse rounded" />
+      <div className="bg-strata-border h-4 w-16 animate-pulse rounded" />
     </div>
   );
 }
@@ -107,22 +110,36 @@ function RowSkeleton() {
 // --- Main Component ---
 
 export default function Vault() {
-  const [view, setView] = useState<ViewTab>("tracks");
+  // Column browser state
+  const [genres, setGenres] = useState<string[]>([]);
+  const [browserArtists, setBrowserArtists] = useState<string[]>([]);
+  const [browserAlbums, setBrowserAlbums] = useState<string[]>([]);
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
+  const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
+  const [genresLoading, setGenresLoading] = useState(true);
+
+  // Track list state
   const [sort, setSort] = useState<SortOption>("plays");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [stats, setStats] = useState<VaultStats | null>(null);
   const [tracks, setTracks] = useState<VaultTrack[]>([]);
-  const [artists, setArtists] = useState<VaultArtist[]>([]);
   const [totalTracks, setTotalTracks] = useState(0);
-  const [totalArtists, setTotalArtists] = useState(0);
   const [offset, setOffset] = useState(0);
 
   const [statsLoading, setStatsLoading] = useState(true);
   const [listLoading, setListLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Album art metadata
+  const [metadata, setMetadata] = useState<Record<string, TrackMetadata>>({});
+  const fetchedMetadataRef = useRef<Set<string>>(new Set());
+
+  // Player state
+  const [nowPlaying, setNowPlaying] = useState<VaultTrack | null>(null);
 
   // Debounce search input
   useEffect(() => {
@@ -134,8 +151,7 @@ export default function Vault() {
   useEffect(() => {
     setOffset(0);
     setTracks([]);
-    setArtists([]);
-  }, [view, sort, debouncedSearch]);
+  }, [sort, debouncedSearch, selectedArtist, selectedAlbum]);
 
   // Fetch stats
   useEffect(() => {
@@ -146,7 +162,60 @@ export default function Vault() {
       .finally(() => setStatsLoading(false));
   }, []);
 
-  // Fetch list data
+  // Fetch genres on mount
+  useEffect(() => {
+    setGenresLoading(true);
+    apiFetch<{ data: string[] }>("/vault/genres")
+      .then((res) => setGenres(res.data))
+      .catch(() => setGenres([]))
+      .finally(() => setGenresLoading(false));
+  }, []);
+
+  // Fetch browser artists (all artist names from the artists endpoint)
+  useEffect(() => {
+    const params = new URLSearchParams({
+      sort: "plays",
+      order: "desc",
+      limit: "500",
+      offset: "0",
+    });
+
+    apiFetch<{ data: Array<{ artistName: string }>; total: number }>(`/vault/artists?${params}`)
+      .then((res) => {
+        setBrowserArtists(res.data.map((a) => a.artistName));
+      })
+      .catch(() => setBrowserArtists([]));
+  }, []);
+
+  // Fetch browser albums when artist changes
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (selectedArtist) params.set("artist", selectedArtist);
+
+    apiFetch<{ data: string[] }>(`/vault/albums?${params}`)
+      .then((res) => setBrowserAlbums(res.data))
+      .catch(() => setBrowserAlbums([]));
+  }, [selectedArtist]);
+
+  // Column browser selection handlers
+  function handleGenreSelect(genre: string | null) {
+    setSelectedGenre(genre);
+    setSelectedArtist(null);
+    setSelectedAlbum(null);
+    // Genre filtering is informational -- we don't have genre-to-artist mapping in DB
+    // so we just update the UI selection state for visual feedback
+  }
+
+  function handleArtistSelect(artist: string | null) {
+    setSelectedArtist(artist);
+    setSelectedAlbum(null);
+  }
+
+  function handleAlbumSelect(album: string | null) {
+    setSelectedAlbum(album);
+  }
+
+  // Fetch track list data
   const fetchList = useCallback(
     async (currentOffset: number, append: boolean) => {
       if (!append) setListLoading(true);
@@ -161,20 +230,14 @@ export default function Vault() {
           offset: String(currentOffset),
         });
         if (debouncedSearch) params.set("search", debouncedSearch);
+        if (selectedArtist) params.set("artist", selectedArtist);
+        if (selectedAlbum) params.set("album", selectedAlbum);
 
-        if (view === "tracks") {
-          const res = await apiFetch<{ data: VaultTrack[]; total: number }>(
-            `/vault/tracks?${params}`,
-          );
-          setTracks((prev) => (append ? [...prev, ...res.data] : res.data));
-          setTotalTracks(res.total);
-        } else {
-          const res = await apiFetch<{ data: VaultArtist[]; total: number }>(
-            `/vault/artists?${params}`,
-          );
-          setArtists((prev) => (append ? [...prev, ...res.data] : res.data));
-          setTotalArtists(res.total);
-        }
+        const res = await apiFetch<{ data: VaultTrack[]; total: number }>(
+          `/vault/tracks?${params}`,
+        );
+        setTracks((prev) => (append ? [...prev, ...res.data] : res.data));
+        setTotalTracks(res.total);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load data");
@@ -183,12 +246,49 @@ export default function Vault() {
         setLoadingMore(false);
       }
     },
-    [view, sort, debouncedSearch],
+    [sort, debouncedSearch, selectedArtist, selectedAlbum],
   );
 
   useEffect(() => {
     fetchList(0, false);
   }, [fetchList]);
+
+  // Fetch album art metadata for visible tracks
+  useEffect(() => {
+    if (tracks.length === 0) return;
+
+    const newIds = tracks
+      .map((t) => t.trackSpotifyId)
+      .filter((id) => !fetchedMetadataRef.current.has(id));
+
+    if (newIds.length === 0) return;
+
+    // Mark as fetched to prevent duplicate requests
+    for (const id of newIds) {
+      fetchedMetadataRef.current.add(id);
+    }
+
+    // Fetch in batches of 50
+    const batches: string[][] = [];
+    for (let i = 0; i < newIds.length; i += 50) {
+      batches.push(newIds.slice(i, i + 50));
+    }
+
+    for (const batch of batches) {
+      apiFetch<{ data: Record<string, TrackMetadata> }>(
+        `/vault/metadata?trackIds=${batch.join(",")}`,
+      )
+        .then((res) => {
+          setMetadata((prev) => ({ ...prev, ...res.data }));
+        })
+        .catch(() => {
+          // Remove from fetched set so they can be retried
+          for (const id of batch) {
+            fetchedMetadataRef.current.delete(id);
+          }
+        });
+    }
+  }, [tracks]);
 
   function handleLoadMore() {
     const newOffset = offset + PAGE_SIZE;
@@ -196,18 +296,14 @@ export default function Vault() {
     fetchList(newOffset, true);
   }
 
-  const currentItems = view === "tracks" ? tracks : artists;
-  const currentTotal = view === "tracks" ? totalTracks : totalArtists;
-  const hasMore = currentItems.length < currentTotal;
+  const hasMore = tracks.length < totalTracks;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white">The Vault</h1>
-        <p className="mt-1 text-sm text-strata-slate-400">
-          Your complete listening archive
-        </p>
+        <p className="text-strata-slate-400 mt-1 text-sm">Your complete listening archive</p>
       </div>
 
       {/* Stats Overview */}
@@ -223,10 +319,7 @@ export default function Vault() {
           <>
             <StatCard label="Unique Tracks" value={stats.totalTracks.toLocaleString()} />
             <StatCard label="Artists" value={stats.totalArtists.toLocaleString()} />
-            <StatCard
-              label="Listening Time"
-              value={formatHours(stats.totalMsPlayed)}
-            />
+            <StatCard label="Listening Time" value={formatHours(stats.totalMsPlayed)} />
             <StatCard
               label="Date Range"
               value={
@@ -240,78 +333,37 @@ export default function Vault() {
         ) : null}
       </div>
 
-      {/* Top Track & Artist */}
-      {stats && (stats.topTrack || stats.topArtist) && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {stats.topTrack && (
-            <div className="rounded-lg border border-strata-border bg-strata-surface p-4">
-              <p className="text-xs text-strata-slate-500">Top Track</p>
-              <p className="mt-1 font-medium text-white">
-                {stats.topTrack.trackName}
-              </p>
-              <p className="text-sm text-strata-slate-400">
-                {stats.topTrack.artistName}
-              </p>
-              <p className="mt-1 font-mono text-sm font-bold text-strata-amber-300">
-                {stats.topTrack.playCount.toLocaleString()} plays
-              </p>
-            </div>
-          )}
-          {stats.topArtist && (
-            <div className="rounded-lg border border-strata-border bg-strata-surface p-4">
-              <p className="text-xs text-strata-slate-500">Top Artist</p>
-              <p className="mt-1 font-medium text-white">
-                {stats.topArtist.artistName}
-              </p>
-              <p className="mt-1 font-mono text-sm font-bold text-strata-amber-300">
-                {stats.topArtist.playCount.toLocaleString()} plays
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Column Browser */}
+      <ColumnBrowser
+        genres={genres}
+        artists={browserArtists}
+        albums={browserAlbums}
+        selectedGenre={selectedGenre}
+        selectedArtist={selectedArtist}
+        selectedAlbum={selectedAlbum}
+        onGenreSelect={handleGenreSelect}
+        onArtistSelect={handleArtistSelect}
+        onAlbumSelect={handleAlbumSelect}
+        loading={genresLoading}
+      />
 
       {/* Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {/* Tabs */}
-        <div className="flex rounded-lg border border-strata-border bg-strata-surface p-0.5">
-          <button
-            onClick={() => setView("tracks")}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-              view === "tracks"
-                ? "bg-strata-amber-500/20 text-strata-amber-300"
-                : "text-strata-slate-400 hover:text-white"
-            }`}
-          >
-            Tracks
-          </button>
-          <button
-            onClick={() => setView("artists")}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-              view === "artists"
-                ? "bg-strata-amber-500/20 text-strata-amber-300"
-                : "text-strata-slate-400 hover:text-white"
-            }`}
-          >
-            Artists
-          </button>
-        </div>
-
         <div className="flex gap-2">
           {/* Search */}
           <input
             type="text"
-            placeholder={`Search ${view}...`}
+            placeholder="Search tracks..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-strata-border bg-strata-surface px-3 py-1.5 text-sm text-white placeholder-strata-slate-500 outline-none transition-colors focus:border-strata-amber-500/50 sm:w-56"
+            className="border-strata-border bg-strata-surface placeholder-strata-slate-500 focus:border-strata-amber-500/50 w-full rounded-lg border px-3 py-1.5 text-sm text-white transition-colors outline-none sm:w-56"
           />
 
           {/* Sort */}
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortOption)}
-            className="rounded-lg border border-strata-border bg-strata-surface px-3 py-1.5 text-sm text-strata-slate-400 outline-none transition-colors focus:border-strata-amber-500/50"
+            className="border-strata-border bg-strata-surface text-strata-slate-400 focus:border-strata-amber-500/50 rounded-lg border px-3 py-1.5 text-sm transition-colors outline-none"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -320,69 +372,114 @@ export default function Vault() {
             ))}
           </select>
         </div>
+
+        {/* Track count */}
+        <p className="text-strata-slate-500 font-mono text-xs">
+          {tracks.length > 0 ? `${tracks.length} of ${totalTracks.toLocaleString()} tracks` : ""}
+        </p>
       </div>
+
+      {/* Active filters indicator */}
+      {(selectedArtist || selectedAlbum) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-strata-slate-500 text-xs">Filtering by:</span>
+          {selectedArtist && (
+            <span className="bg-strata-amber-500/10 text-strata-amber-300 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs">
+              {selectedArtist}
+              <button
+                onClick={() => {
+                  setSelectedArtist(null);
+                  setSelectedAlbum(null);
+                }}
+                className="text-strata-amber-300/60 hover:text-strata-amber-300 ml-1"
+              >
+                x
+              </button>
+            </span>
+          )}
+          {selectedAlbum && (
+            <span className="bg-strata-amber-500/10 text-strata-amber-300 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs">
+              {selectedAlbum}
+              <button
+                onClick={() => setSelectedAlbum(null)}
+                className="text-strata-amber-300/60 hover:text-strata-amber-300 ml-1"
+              >
+                x
+              </button>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Error state */}
       {error && (
         <div className="rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400">
           {error}
-          <button
-            onClick={() => fetchList(0, false)}
-            className="ml-3 underline hover:text-red-300"
-          >
+          <button onClick={() => fetchList(0, false)} className="ml-3 underline hover:text-red-300">
             Retry
           </button>
         </div>
       )}
 
-      {/* List */}
-      <div className="overflow-hidden rounded-lg border border-strata-border">
+      {/* Track List */}
+      <div className="border-strata-border overflow-hidden rounded-lg border">
         {listLoading ? (
           <div>
             {Array.from({ length: 8 }).map((_, i) => (
               <RowSkeleton key={i} />
             ))}
           </div>
-        ) : currentItems.length === 0 ? (
+        ) : tracks.length === 0 ? (
           <div className="px-6 py-16 text-center">
             <p className="text-strata-slate-400">
-              {debouncedSearch
+              {debouncedSearch || selectedArtist || selectedAlbum
                 ? "No results found"
                 : "No listening history yet"}
             </p>
-            {!debouncedSearch && (
+            {!debouncedSearch && !selectedArtist && !selectedAlbum && (
               <Link
                 to="/import"
-                className="mt-3 inline-block text-sm text-strata-amber-300 underline hover:text-strata-amber-200"
+                className="text-strata-amber-300 hover:text-strata-amber-200 mt-3 inline-block text-sm underline"
               >
                 Import your streaming history
               </Link>
             )}
           </div>
-        ) : view === "tracks" ? (
-          <TrackList tracks={tracks} />
         ) : (
-          <ArtistList artists={artists} />
+          <TrackList
+            tracks={tracks}
+            metadata={metadata}
+            nowPlaying={nowPlaying}
+            onTrackClick={setNowPlaying}
+          />
         )}
       </div>
 
       {/* Pagination */}
-      {currentItems.length > 0 && (
+      {tracks.length > 0 && (
         <div className="flex items-center justify-between">
-          <p className="font-mono text-xs text-strata-slate-500">
-            {currentItems.length} of {currentTotal.toLocaleString()}{" "}
-            {view}
+          <p className="text-strata-slate-500 font-mono text-xs">
+            {tracks.length} of {totalTracks.toLocaleString()} tracks
           </p>
           {hasMore && (
             <button
               onClick={handleLoadMore}
               disabled={loadingMore}
-              className="rounded-lg border border-strata-border bg-strata-surface px-4 py-2 text-sm text-strata-slate-400 transition-colors hover:border-strata-amber-500/50 hover:text-white disabled:opacity-50"
+              className="border-strata-border bg-strata-surface text-strata-slate-400 hover:border-strata-amber-500/50 rounded-lg border px-4 py-2 text-sm transition-colors hover:text-white disabled:opacity-50"
             >
               {loadingMore ? "Loading..." : "Load More"}
             </button>
           )}
         </div>
+      )}
+
+      {/* Spotify Player Bar */}
+      {nowPlaying && (
+        <PlayerBar
+          track={nowPlaying}
+          albumArt={metadata[nowPlaying.trackSpotifyId]?.albumArt}
+          onClose={() => setNowPlaying(null)}
+        />
       )}
     </div>
   );
@@ -390,20 +487,12 @@ export default function Vault() {
 
 // --- Sub-components ---
 
-function StatCard({
-  label,
-  value,
-  small,
-}: {
-  label: string;
-  value: string;
-  small?: boolean;
-}) {
+function StatCard({ label, value, small }: { label: string; value: string; small?: boolean }) {
   return (
-    <div className="rounded-lg border border-strata-border bg-strata-surface p-4">
-      <p className="text-xs text-strata-slate-500">{label}</p>
+    <div className="border-strata-border bg-strata-surface rounded-lg border p-4">
+      <p className="text-strata-slate-500 text-xs">{label}</p>
       <p
-        className={`mt-1 font-mono font-bold text-strata-amber-300 ${small ? "text-sm" : "text-xl"}`}
+        className={`text-strata-amber-300 mt-1 font-mono font-bold ${small ? "text-sm" : "text-xl"}`}
       >
         {value}
       </p>
@@ -411,91 +500,169 @@ function StatCard({
   );
 }
 
-function TrackList({ tracks }: { tracks: VaultTrack[] }) {
+function TrackList({
+  tracks,
+  metadata,
+  nowPlaying,
+  onTrackClick,
+}: {
+  tracks: VaultTrack[];
+  metadata: Record<string, TrackMetadata>;
+  nowPlaying: VaultTrack | null;
+  onTrackClick: (track: VaultTrack) => void;
+}) {
   return (
     <div>
       {/* Header row */}
-      <div className="hidden border-b border-strata-border bg-strata-surface/50 px-4 py-2 text-xs font-medium text-strata-slate-500 sm:flex">
+      <div className="border-strata-border bg-strata-surface/50 text-strata-slate-500 hidden border-b px-4 py-2 text-xs font-medium sm:flex">
         <span className="w-10 text-center">#</span>
+        <span className="w-12" /> {/* Album art column */}
         <span className="flex-1">Track</span>
         <span className="w-20 text-right">Plays</span>
         <span className="w-20 text-right">Time</span>
         <span className="w-24 text-right">Last Played</span>
       </div>
 
-      {tracks.map((track, i) => (
-        <div
-          key={`${track.trackSpotifyId}-${i}`}
-          className="flex items-center border-b border-strata-border/30 px-4 py-3 transition-colors hover:bg-strata-surface/50"
-        >
-          <span className="w-10 text-center font-mono text-xs text-strata-slate-500">
-            {i + 1}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-white">
-              {track.trackName}
-            </p>
-            <p className="truncate text-xs text-strata-slate-400">
-              {track.artistName}
-              {track.albumName && (
-                <span className="text-strata-slate-500">
-                  {" "}
-                  &middot; {track.albumName}
-                </span>
+      {tracks.map((track, i) => {
+        const meta = metadata[track.trackSpotifyId];
+        const isPlaying = nowPlaying?.trackSpotifyId === track.trackSpotifyId;
+
+        return (
+          <button
+            key={`${track.trackSpotifyId}-${i}`}
+            onClick={() => onTrackClick(track)}
+            className={`border-strata-border/30 hover:bg-strata-surface/50 flex w-full items-center border-b px-4 py-3 text-left transition-colors ${
+              isPlaying ? "bg-strata-amber-500/10" : ""
+            }`}
+          >
+            <span className="text-strata-slate-500 w-10 text-center font-mono text-xs">
+              {i + 1}
+            </span>
+
+            {/* Album art */}
+            <span className="mr-3 w-10 shrink-0">
+              {meta?.albumArt ? (
+                <img
+                  src={meta.albumArt}
+                  alt=""
+                  className="h-10 w-10 rounded object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <span className="bg-strata-border block h-10 w-10 rounded" />
               )}
-            </p>
-          </div>
-          <span className="w-20 text-right font-mono text-sm font-bold text-strata-amber-300">
-            {track.playCount.toLocaleString()}
-          </span>
-          <span className="hidden w-20 text-right font-mono text-xs text-strata-slate-400 sm:block">
-            {formatMs(track.totalMsPlayed)}
-          </span>
-          <span className="hidden w-24 text-right text-xs text-strata-slate-500 sm:block">
-            {formatRelativeDate(track.lastPlayedAt)}
-          </span>
-        </div>
-      ))}
+            </span>
+
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-white">
+                {track.trackName}
+              </span>
+              <span className="text-strata-slate-400 block truncate text-xs">
+                {track.artistName}
+                {track.albumName && (
+                  <span className="text-strata-slate-500"> &middot; {track.albumName}</span>
+                )}
+              </span>
+            </span>
+
+            <span className="text-strata-amber-300 w-20 text-right font-mono text-sm font-bold">
+              {track.playCount.toLocaleString()}
+            </span>
+            <span className="text-strata-slate-400 hidden w-20 text-right font-mono text-xs sm:block">
+              {formatMs(track.totalMsPlayed)}
+            </span>
+            <span className="text-strata-slate-500 hidden w-24 text-right text-xs sm:block">
+              {formatRelativeDate(track.lastPlayedAt)}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function ArtistList({ artists }: { artists: VaultArtist[] }) {
-  return (
-    <div>
-      {/* Header row */}
-      <div className="hidden border-b border-strata-border bg-strata-surface/50 px-4 py-2 text-xs font-medium text-strata-slate-500 sm:flex">
-        <span className="w-10 text-center">#</span>
-        <span className="flex-1">Artist</span>
-        <span className="w-20 text-right">Plays</span>
-        <span className="w-24 text-right">Unique Tracks</span>
-        <span className="w-20 text-right">Time</span>
-      </div>
+function PlayerBar({
+  track,
+  albumArt,
+  onClose,
+}: {
+  track: VaultTrack;
+  albumArt?: string;
+  onClose: () => void;
+}) {
+  const [showEmbed, setShowEmbed] = useState(false);
 
-      {artists.map((artist, i) => (
-        <div
-          key={`${artist.artistName}-${i}`}
-          className="flex items-center border-b border-strata-border/30 px-4 py-3 transition-colors hover:bg-strata-surface/50"
-        >
-          <span className="w-10 text-center font-mono text-xs text-strata-slate-500">
-            {i + 1}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-white">
-              {artist.artistName}
-            </p>
-          </div>
-          <span className="w-20 text-right font-mono text-sm font-bold text-strata-amber-300">
-            {artist.playCount.toLocaleString()}
-          </span>
-          <span className="hidden w-24 text-right font-mono text-xs text-strata-slate-400 sm:block">
-            {artist.uniqueTracks.toLocaleString()}
-          </span>
-          <span className="hidden w-20 text-right font-mono text-xs text-strata-slate-400 sm:block">
-            {formatMs(artist.totalMsPlayed)}
-          </span>
+  return (
+    <div className="border-strata-border bg-strata-surface fixed inset-x-0 bottom-0 z-50 border-t">
+      {/* Spotify embed player */}
+      {showEmbed && (
+        <div className="border-strata-border border-b">
+          <iframe
+            src={`https://open.spotify.com/embed/track/${track.trackSpotifyId}?theme=0`}
+            width="100%"
+            height="80"
+            frameBorder={0}
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+            loading="lazy"
+            className="block"
+          />
         </div>
-      ))}
+      )}
+
+      {/* Player controls */}
+      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
+        {/* Album art */}
+        {albumArt ? (
+          <img src={albumArt} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+        ) : (
+          <span className="bg-strata-border block h-12 w-12 shrink-0 rounded" />
+        )}
+
+        {/* Track info */}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-white">{track.trackName}</p>
+          <p className="text-strata-slate-400 truncate text-xs">{track.artistName}</p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            onClick={() => setShowEmbed(!showEmbed)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+              showEmbed
+                ? "border-strata-amber-500/50 bg-strata-amber-500/20 text-strata-amber-300"
+                : "border-strata-border text-strata-slate-400 hover:border-strata-amber-500/50 hover:text-white"
+            }`}
+          >
+            {showEmbed ? "Hide Player" : "Preview"}
+          </button>
+
+          <a
+            href={`https://open.spotify.com/track/${track.trackSpotifyId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="border-strata-border text-strata-slate-400 hover:border-strata-amber-500/50 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:text-white"
+          >
+            Open in Spotify
+          </a>
+
+          <button
+            onClick={onClose}
+            className="text-strata-slate-500 rounded-lg px-2 py-1.5 transition-colors hover:text-white"
+            aria-label="Close player"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

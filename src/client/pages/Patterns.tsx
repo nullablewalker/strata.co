@@ -1,7 +1,25 @@
+/**
+ * Listening Patterns page — reveals time-based habits through three D3.js charts:
+ *
+ *   1. **Hourly bar chart** — vertical bars for each hour (0-23), highlighting
+ *      the peak listening hour. Answers "when during the day do I listen most?"
+ *   2. **Weekly horizontal bar chart** — one bar per day-of-week, highlighting
+ *      the busiest day. Answers "which weekday do I listen most?"
+ *   3. **Monthly area chart** — smoothed line + gradient area showing seasonal
+ *      variation. Answers "which months am I most active?"
+ *
+ * All charts share the same warm amber palette and are responsive via
+ * ResizeObserver, re-drawing on container width changes.
+ *
+ * Filters: year selector and a Swinsian-style 3-column browser (Genre,
+ * Artist, Album) allow cascading drill-down. The "listener type" badge
+ * (e.g. "Night Owl") provides a fun personality label derived from the data.
+ */
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as d3 from "d3";
 import { apiFetch } from "../lib/api";
 import { Link } from "react-router-dom";
+import ColumnBrowser from "../components/ColumnBrowser";
 
 // --- Types ---
 
@@ -35,6 +53,8 @@ interface OverviewData {
 }
 
 // --- Chart colors ---
+// Hardcoded hex values (not CSS vars) because D3 operates outside React's
+// style system. These match the Tailwind @theme tokens in index.css.
 const AMBER_500 = "#a66b1f";
 const AMBER_300 = "#d4a04a";
 const AMBER_200 = "#e8c88c";
@@ -44,9 +64,12 @@ const SLATE_400 = "#8b9eac";
 const SLATE_500 = "#6b7f8d";
 
 // --- Shared chart config ---
+// Consistent margins across all three charts for visual alignment.
 const CHART_MARGIN = { top: 20, right: 20, bottom: 40, left: 50 };
 
 // --- Overview Cards ---
+// Personality summary derived from listening data — the "listener type" badge
+// and key stats give users a quick, emotionally engaging snapshot.
 
 function OverviewCards({ data }: { data: OverviewData }) {
   return (
@@ -101,6 +124,9 @@ function StatCard({
 }
 
 // --- Hourly Bar Chart ---
+// Vertical bar chart with 24 bars (0:00 - 23:00). The peak hour is
+// highlighted in a brighter amber so it pops visually. X-axis shows
+// every 3rd hour label to avoid crowding.
 
 function HourlyChart({ data }: { data: HourlyData[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -111,6 +137,7 @@ function HourlyChart({ data }: { data: HourlyData[] }) {
     const svg = svgRef.current;
     if (!container || !svg) return;
 
+    // Use container width for responsive sizing; height is fixed.
     const width = container.clientWidth;
     const height = 300;
     const m = CHART_MARGIN;
@@ -118,17 +145,20 @@ function HourlyChart({ data }: { data: HourlyData[] }) {
     const innerH = height - m.top - m.bottom;
 
     const maxCount = d3.max(data, (d) => d.count) ?? 0;
+    // Identify the peak hour to give it a distinct highlight color.
     const peakHour = data.reduce(
       (max, d) => (d.count > max.count ? d : max),
       data[0],
     ).hour;
 
+    // Band scale maps each hour to an equal-width column with padding.
     const x = d3
       .scaleBand<number>()
       .domain(data.map((d) => d.hour))
       .range([0, innerW])
       .padding(0.15);
 
+    // Y domain extends 10% above max for breathing room; .nice() rounds to clean ticks.
     const y = d3
       .scaleLinear()
       .domain([0, maxCount * 1.1])
@@ -143,7 +173,7 @@ function HourlyChart({ data }: { data: HourlyData[] }) {
       .append("g")
       .attr("transform", `translate(${m.left},${m.top})`);
 
-    // Gridlines
+    // Subtle horizontal gridlines — helps read values without a full axis.
     g.append("g")
       .attr("class", "grid")
       .call(
@@ -158,7 +188,7 @@ function HourlyChart({ data }: { data: HourlyData[] }) {
         g.selectAll(".tick line").attr("stroke", BORDER).attr("stroke-opacity", 0.7),
       );
 
-    // Bars
+    // Bars — peak hour gets AMBER_300 (lighter), others get AMBER_500 (darker).
     g.selectAll("rect")
       .data(data)
       .join("rect")
@@ -169,7 +199,7 @@ function HourlyChart({ data }: { data: HourlyData[] }) {
       .attr("rx", 2)
       .attr("fill", (d) => (d.hour === peakHour ? AMBER_300 : AMBER_500));
 
-    // X axis
+    // X axis — show every 3rd hour to keep labels readable.
     g.append("g")
       .attr("transform", `translate(0,${innerH})`)
       .call(
@@ -182,7 +212,7 @@ function HourlyChart({ data }: { data: HourlyData[] }) {
       .call((g) => g.selectAll(".tick line").attr("stroke", BORDER))
       .call((g) => g.selectAll(".tick text").attr("fill", SLATE_400).attr("font-size", "11px"));
 
-    // Y axis
+    // Y axis — labels only, no domain line or tick marks (gridlines suffice).
     g.append("g")
       .call(d3.axisLeft(y).ticks(5))
       .call((g) => g.select(".domain").remove())
@@ -190,6 +220,7 @@ function HourlyChart({ data }: { data: HourlyData[] }) {
       .call((g) => g.selectAll(".tick text").attr("fill", SLATE_400).attr("font-size", "11px"));
   }, [data]);
 
+  // Draw on mount and re-draw whenever the container resizes (responsive).
   useEffect(() => {
     draw();
     const observer = new ResizeObserver(draw);
@@ -205,6 +236,9 @@ function HourlyChart({ data }: { data: HourlyData[] }) {
 }
 
 // --- Weekly Horizontal Bar Chart ---
+// Horizontal layout (bars grow left-to-right) works well for 7 short labels
+// and makes it easy to compare day-of-week values at a glance. The busiest
+// day is highlighted. Count labels sit at the end of each bar for precision.
 
 function WeeklyChart({ data }: { data: WeeklyData[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -217,6 +251,8 @@ function WeeklyChart({ data }: { data: WeeklyData[] }) {
 
     const width = container.clientWidth;
     const height = 280;
+    // Tighter left margin than the shared CHART_MARGIN because short day
+    // abbreviations (Mon, Tue, ...) need less space than numeric y-axis labels.
     const m = { top: 10, right: 20, bottom: 20, left: 30 };
     const innerW = width - m.left - m.right;
     const innerH = height - m.top - m.bottom;
@@ -227,6 +263,7 @@ function WeeklyChart({ data }: { data: WeeklyData[] }) {
       data[0],
     ).day;
 
+    // Band scale on the Y axis (one band per weekday), linear scale on X.
     const y = d3
       .scaleBand<number>()
       .domain(data.map((d) => d.day))
@@ -247,7 +284,7 @@ function WeeklyChart({ data }: { data: WeeklyData[] }) {
       .append("g")
       .attr("transform", `translate(${m.left},${m.top})`);
 
-    // Gridlines
+    // Vertical gridlines for the horizontal bar chart.
     g.append("g")
       .attr("class", "grid")
       .call(
@@ -262,7 +299,7 @@ function WeeklyChart({ data }: { data: WeeklyData[] }) {
         g.selectAll(".tick line").attr("stroke", BORDER).attr("stroke-opacity", 0.7),
       );
 
-    // Bars
+    // Horizontal bars — busiest day highlighted in brighter amber.
     g.selectAll("rect")
       .data(data)
       .join("rect")
@@ -273,7 +310,7 @@ function WeeklyChart({ data }: { data: WeeklyData[] }) {
       .attr("rx", 2)
       .attr("fill", (d) => (d.day === busiestDay ? AMBER_300 : AMBER_500));
 
-    // Day labels
+    // Day name labels to the left of each bar.
     g.selectAll(".day-label")
       .data(data)
       .join("text")
@@ -286,7 +323,7 @@ function WeeklyChart({ data }: { data: WeeklyData[] }) {
       .attr("font-size", "12px")
       .text((d) => d.dayName);
 
-    // Count labels on bars
+    // Numeric count labels placed just past the end of each bar.
     g.selectAll(".count-label")
       .data(data)
       .join("text")
@@ -299,6 +336,7 @@ function WeeklyChart({ data }: { data: WeeklyData[] }) {
       .text((d) => (d.count > 0 ? d.count.toLocaleString() : ""));
   }, [data]);
 
+  // Responsive: re-draw on container resize.
   useEffect(() => {
     draw();
     const observer = new ResizeObserver(draw);
@@ -314,6 +352,9 @@ function WeeklyChart({ data }: { data: WeeklyData[] }) {
 }
 
 // --- Monthly Area Chart ---
+// Area chart shows seasonal listening trends. The gradient fill fading to
+// transparent at the bottom creates a layered "strata" feel. Monotone-X
+// curve interpolation prevents overshoot artifacts between data points.
 
 function MonthlyChart({ data }: { data: MonthlyData[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -332,12 +373,14 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
 
     const maxCount = d3.max(data, (d) => d.count) ?? 0;
 
+    // Point scale (not band) because area/line charts need exact x positions.
     const x = d3
       .scalePoint<number>()
       .domain(data.map((d) => d.month))
       .range([0, innerW])
       .padding(0.5);
 
+    // Extra 15% headroom so peaks don't touch the top edge.
     const y = d3
       .scaleLinear()
       .domain([0, maxCount * 1.15])
@@ -348,7 +391,8 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
     sel.selectAll("*").remove();
     sel.attr("width", width).attr("height", height);
 
-    // Gradient definition
+    // Vertical gradient for the area fill — fades from semi-opaque amber at
+    // the line to nearly transparent at the baseline, creating depth.
     const defs = sel.append("defs");
     const gradient = defs
       .append("linearGradient")
@@ -372,7 +416,7 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
       .append("g")
       .attr("transform", `translate(${m.left},${m.top})`);
 
-    // Gridlines
+    // Horizontal gridlines.
     g.append("g")
       .attr("class", "grid")
       .call(
@@ -387,7 +431,7 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
         g.selectAll(".tick line").attr("stroke", BORDER).attr("stroke-opacity", 0.7),
       );
 
-    // Area
+    // Filled area under the line — uses the gradient defined above.
     const area = d3
       .area<MonthlyData>()
       .x((d) => x(d.month)!)
@@ -400,7 +444,7 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
       .attr("d", area)
       .attr("fill", "url(#area-gradient)");
 
-    // Line
+    // Trend line on top of the area fill.
     const line = d3
       .line<MonthlyData>()
       .x((d) => x(d.month)!)
@@ -414,7 +458,8 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
       .attr("stroke", AMBER_300)
       .attr("stroke-width", 2);
 
-    // Dots
+    // Data point dots — stroked with surface color to visually separate from
+    // the line when closely spaced.
     g.selectAll("circle")
       .data(data)
       .join("circle")
@@ -425,7 +470,7 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
       .attr("stroke", SURFACE)
       .attr("stroke-width", 1.5);
 
-    // X axis
+    // X axis with Japanese month labels (1月, 2月, ...).
     g.append("g")
       .attr("transform", `translate(0,${innerH})`)
       .call(
@@ -437,7 +482,7 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
       .call((g) => g.selectAll(".tick line").attr("stroke", BORDER))
       .call((g) => g.selectAll(".tick text").attr("fill", SLATE_400).attr("font-size", "11px"));
 
-    // Y axis
+    // Y axis — label-only, same pattern as the hourly chart.
     g.append("g")
       .call(d3.axisLeft(y).ticks(5))
       .call((g) => g.select(".domain").remove())
@@ -445,6 +490,7 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
       .call((g) => g.selectAll(".tick text").attr("fill", SLATE_400).attr("font-size", "11px"));
   }, [data]);
 
+  // Responsive: re-draw on container resize.
   useEffect(() => {
     draw();
     const observer = new ResizeObserver(draw);
@@ -459,7 +505,7 @@ function MonthlyChart({ data }: { data: MonthlyData[] }) {
   );
 }
 
-// --- Skeleton ---
+// --- Skeleton loading placeholders ---
 
 function ChartSkeleton() {
   return (
@@ -486,6 +532,8 @@ function OverviewSkeleton() {
 // --- Main Page ---
 
 export default function Patterns() {
+  // Each dataset is fetched independently but in a single Promise.all batch.
+  // Null means "not yet loaded" (distinct from empty array = "loaded, no data").
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [hourly, setHourly] = useState<HourlyData[] | null>(null);
   const [weekly, setWeekly] = useState<WeeklyData[] | null>(null);
@@ -494,16 +542,87 @@ export default function Patterns() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<string>("");
-  const [artistFilter, setArtistFilter] = useState("");
-  const [appliedArtist, setAppliedArtist] = useState("");
 
+  // Column browser state — cascading filters for Genre > Artist > Album
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
+  const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
+  const [artists, setArtists] = useState<string[]>([]);
+  const [albums, setAlbums] = useState<string[]>([]);
+  const [browserLoading, setBrowserLoading] = useState(true);
+
+  // Fetch artist list for the column browser. Re-runs when year changes.
+  const fetchArtists = useCallback(async (year: string) => {
+    const params = new URLSearchParams();
+    if (year) params.set("year", year);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+
+    try {
+      const res = await apiFetch<{ data: string[] }>(`/patterns/artists${qs}`);
+      setArtists(res.data);
+    } catch {
+      setArtists([]);
+    }
+  }, []);
+
+  // Fetch album list for the column browser. Re-runs when year or artist changes.
+  const fetchAlbums = useCallback(async (year: string, artist: string | null) => {
+    const params = new URLSearchParams();
+    if (year) params.set("year", year);
+    if (artist) params.set("artist", artist);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+
+    try {
+      const res = await apiFetch<{ data: string[] }>(`/patterns/albums${qs}`);
+      setAlbums(res.data);
+    } catch {
+      setAlbums([]);
+    }
+  }, []);
+
+  // Fetch browser data on mount and when year changes
+  useEffect(() => {
+    setBrowserLoading(true);
+    Promise.all([
+      fetchArtists(selectedYear),
+      fetchAlbums(selectedYear, selectedArtist),
+    ]).finally(() => setBrowserLoading(false));
+  }, [selectedYear, selectedArtist, fetchArtists, fetchAlbums]);
+
+  // Cascading selection handlers
+  const handleGenreSelect = useCallback((_genre: string | null) => {
+    // Genre is a placeholder for now — no filtering effect yet
+    setSelectedGenre(_genre);
+    setSelectedArtist(null);
+    setSelectedAlbum(null);
+  }, []);
+
+  const handleArtistSelect = useCallback((artist: string | null) => {
+    setSelectedArtist(artist);
+    setSelectedAlbum(null);
+  }, []);
+
+  const handleAlbumSelect = useCallback((album: string | null) => {
+    setSelectedAlbum(album);
+  }, []);
+
+  // Reset column browser when year changes
+  const handleYearChange = useCallback((year: string) => {
+    setSelectedYear(year);
+    setSelectedGenre(null);
+    setSelectedArtist(null);
+    setSelectedAlbum(null);
+  }, []);
+
+  // Fetch all four pattern datasets in parallel. Re-runs when any filter changes.
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     const params = new URLSearchParams();
     if (selectedYear) params.set("year", selectedYear);
-    if (appliedArtist) params.set("artist", appliedArtist);
+    if (selectedArtist) params.set("artist", selectedArtist);
+    if (selectedAlbum) params.set("album", selectedAlbum);
     const qs = params.toString() ? `?${params.toString()}` : "";
 
     try {
@@ -524,34 +643,34 @@ export default function Patterns() {
     } finally {
       setLoading(false);
     }
-  }, [selectedYear, appliedArtist]);
+  }, [selectedYear, selectedArtist, selectedAlbum]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  // Check if there's any meaningful data to display. An hourly array with
+  // all-zero counts means the user has no history for the selected filters.
   const hasData =
     hourly !== null && hourly.some((d) => d.count > 0);
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Listening Patterns</h1>
-        <p className="mt-1 text-sm text-strata-slate-400">
-          あなたのリスニング傾向を時間軸で分析
-        </p>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap items-end gap-4">
+      {/* Header + Year Filter */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Listening Patterns</h1>
+          <p className="mt-1 text-sm text-strata-slate-400">
+            あなたのリスニング傾向を時間軸で分析
+          </p>
+        </div>
         <div>
           <label className="mb-1 block text-xs text-strata-slate-500">
             年
           </label>
           <select
             value={selectedYear}
-            onChange={(e) => setSelectedYear(e.target.value)}
+            onChange={(e) => handleYearChange(e.target.value)}
             className="rounded-lg border border-strata-border bg-strata-surface px-3 py-1.5 text-sm text-white focus:border-strata-amber-500 focus:outline-none"
           >
             <option value="">すべて</option>
@@ -562,41 +681,21 @@ export default function Patterns() {
             ))}
           </select>
         </div>
-        <div>
-          <label className="mb-1 block text-xs text-strata-slate-500">
-            アーティスト
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={artistFilter}
-              onChange={(e) => setArtistFilter(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") setAppliedArtist(artistFilter);
-              }}
-              placeholder="アーティスト名..."
-              className="rounded-lg border border-strata-border bg-strata-surface px-3 py-1.5 text-sm text-white placeholder:text-strata-slate-600 focus:border-strata-amber-500 focus:outline-none"
-            />
-            <button
-              onClick={() => setAppliedArtist(artistFilter)}
-              className="rounded-lg bg-strata-amber-600 px-3 py-1.5 text-sm text-white hover:bg-strata-amber-500 transition-colors"
-            >
-              適用
-            </button>
-            {appliedArtist && (
-              <button
-                onClick={() => {
-                  setArtistFilter("");
-                  setAppliedArtist("");
-                }}
-                className="rounded-lg border border-strata-border px-3 py-1.5 text-sm text-strata-slate-400 hover:text-white transition-colors"
-              >
-                クリア
-              </button>
-            )}
-          </div>
-        </div>
       </div>
+
+      {/* Column Browser */}
+      <ColumnBrowser
+        genres={[]}
+        artists={artists}
+        albums={albums}
+        selectedGenre={selectedGenre}
+        selectedArtist={selectedArtist}
+        selectedAlbum={selectedAlbum}
+        onGenreSelect={handleGenreSelect}
+        onArtistSelect={handleArtistSelect}
+        onAlbumSelect={handleAlbumSelect}
+        loading={browserLoading}
+      />
 
       {/* Error state */}
       {error && (
@@ -667,6 +766,7 @@ export default function Patterns() {
   );
 }
 
+/** Wrapper card that provides consistent styling and a title for each chart. */
 function ChartSection({
   title,
   children,

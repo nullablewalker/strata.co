@@ -1,4 +1,7 @@
 {
+  // Separate TypeScript config for Node-side tooling config files (Vite, Drizzle, PostCSS, etc.).
+  // These files run in Node at build/dev time, not in the browser or Workers runtime,
+  // so they need their own config without DOM libs or Workers types.
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -8,5 +11,6 @@
     "skipLibCheck": true,
     "noEmit": true
   },
+  // Explicitly list every config file that should be checked under these settings.
   "include": ["vite.config.ts", "drizzle.config.ts", "tailwind.config.ts", "postcss.config.js"]
 }
