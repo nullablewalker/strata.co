@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiFetch } from "../lib/api";
 import ColumnBrowser from "../components/ColumnBrowser";
+import SpotifyEmbed from "../components/SpotifyEmbed";
 
 // --- Types ---
 
@@ -112,6 +113,8 @@ function RowSkeleton() {
 // --- Main Component ---
 
 export default function Vault() {
+  const navigate = useNavigate();
+
   // Column browser state
   const [browserArtists, setBrowserArtists] = useState<string[]>([]);
   const [browserAlbums, setBrowserAlbums] = useState<string[]>([]);
@@ -446,6 +449,7 @@ export default function Vault() {
             metadata={metadata}
             nowPlaying={nowPlaying}
             onTrackClick={setNowPlaying}
+            navigate={navigate}
           />
         )}
       </div>
@@ -497,16 +501,19 @@ function TrackList({
   metadata,
   nowPlaying,
   onTrackClick,
+  navigate,
 }: {
   tracks: VaultTrack[];
   metadata: Record<string, TrackMetadata>;
   nowPlaying: VaultTrack | null;
   onTrackClick: (track: VaultTrack) => void;
+  navigate: ReturnType<typeof useNavigate>;
 }) {
   return (
     <div>
       {/* Header row */}
       <div className="border-white/[0.04] bg-white/[0.03] text-strata-slate-500 hidden border-b px-4 py-2 text-xs font-medium sm:flex">
+        <span className="w-8" /> {/* Play button column */}
         <span className="w-10 text-center">#</span>
         <span className="w-12" /> {/* Album art column */}
         <span className="flex-1">Track</span>
@@ -520,13 +527,33 @@ function TrackList({
         const isPlaying = nowPlaying?.trackSpotifyId === track.trackSpotifyId;
 
         return (
-          <button
+          <div
             key={`${track.trackSpotifyId}-${i}`}
-            onClick={() => onTrackClick(track)}
-            className={`border-strata-border/30 hover:bg-white/[0.04] flex w-full items-center border-b px-4 py-3 text-left transition-colors ${
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate(`/vault/track/${track.trackSpotifyId}`)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") navigate(`/vault/track/${track.trackSpotifyId}`);
+            }}
+            className={`group cursor-pointer border-strata-border/30 hover:bg-white/[0.04] flex w-full items-center border-b px-4 py-3 text-left transition-colors ${
               isPlaying ? "bg-strata-amber-500/10" : ""
             }`}
           >
+            {/* Play button */}
+            <button
+              type="button"
+              title="Play"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTrackClick(track);
+              }}
+              className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors text-stone-400 hover:text-amber-400 group-hover:text-stone-300"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </button>
+
             <span className="text-strata-slate-500 w-10 text-center font-mono text-xs">
               {i + 1}
             </span>
@@ -566,11 +593,35 @@ function TrackList({
             <span className="text-strata-slate-500 hidden w-24 text-right text-xs sm:block">
               {formatRelativeDate(track.lastPlayedAt)}
             </span>
-          </button>
+          </div>
         );
       })}
     </div>
   );
+}
+
+/**
+ * Hook to detect if the viewport matches a media query (for conditional rendering).
+ * Used to ensure only ONE SpotifyEmbed instance exists in the DOM at a time,
+ * preventing duplicate audio playback from desktop/mobile layouts.
+ */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return false;
+    }
+    return window.matchMedia(query).matches;
+  });
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mql = window.matchMedia(query);
+    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, [query]);
+
+  return matches;
 }
 
 function PlayerBar({
@@ -580,6 +631,11 @@ function PlayerBar({
   track: VaultTrack | null;
   albumArt?: string;
 }) {
+  // Use JS media query to conditionally render ONE layout with ONE SpotifyEmbed
+  // to prevent duplicate audio from hidden DOM elements.
+  // Tailwind lg breakpoint = 1024px
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+
   return (
     <div
       className={`fixed inset-x-0 bottom-0 z-40 transition-transform duration-500 ease-out ${
@@ -591,83 +647,18 @@ function PlayerBar({
       <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-strata-amber-400/20 to-transparent blur-sm" />
 
       <div className="border-white/[0.06] bg-strata-bg/90 border-t backdrop-blur-xl">
-        {/* Desktop layout (lg+): [Art] [Info] [Embed] [Link] */}
-        <div className="mx-auto hidden max-w-7xl items-center gap-4 px-4 py-2.5 lg:flex">
-          {/* Album art */}
-          {albumArt ? (
-            <img src={albumArt} alt="" className="h-14 w-14 shrink-0 rounded object-cover" />
-          ) : (
-            <span className="bg-strata-border block h-14 w-14 shrink-0 rounded" />
-          )}
-
-          {/* Track info */}
-          <div className="min-w-0 shrink-0 basis-44">
-            <p className="truncate text-sm font-medium text-white">
-              {track?.trackName}
-            </p>
-            <p className="text-strata-slate-400 truncate text-xs">
-              {track?.artistName}
-            </p>
-          </div>
-
-          {/* Spotify Embed — always visible */}
-          <div className="min-w-0 flex-1">
-            {track && (
-              <iframe
-                key={track.trackSpotifyId}
-                src={`https://open.spotify.com/embed/track/${track.trackSpotifyId}?theme=0`}
-                width="100%"
-                height="80"
-                frameBorder={0}
-                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                loading="lazy"
-                className="block rounded"
-              />
-            )}
-          </div>
-
-          {/* Open in Spotify link */}
-          {track && (
-            <a
-              href={`https://open.spotify.com/track/${track.trackSpotifyId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="border-strata-border text-strata-slate-400 hover:border-strata-amber-500/50 shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:text-white"
-            >
-              Open in Spotify
-            </a>
-          )}
-        </div>
-
-        {/* Mobile layout: [Embed full width] then [Art] [Info] [Link] */}
-        <div className="lg:hidden">
-          {/* Spotify Embed — full width */}
-          <div className="px-3 pt-2">
-            {track && (
-              <iframe
-                key={`mobile-${track.trackSpotifyId}`}
-                src={`https://open.spotify.com/embed/track/${track.trackSpotifyId}?theme=0`}
-                width="100%"
-                height="80"
-                frameBorder={0}
-                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                loading="lazy"
-                className="block rounded"
-              />
-            )}
-          </div>
-
-          {/* Track info row */}
-          <div className="flex items-center gap-3 px-3 py-2.5">
+        {isDesktop ? (
+          /* Desktop layout (lg+): horizontal row [Art][Info][Embed][Link] */
+          <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-2.5">
             {/* Album art */}
             {albumArt ? (
-              <img src={albumArt} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+              <img src={albumArt} alt="" className="h-14 w-14 shrink-0 rounded object-cover" />
             ) : (
-              <span className="bg-strata-border block h-12 w-12 shrink-0 rounded" />
+              <span className="bg-strata-border block h-14 w-14 shrink-0 rounded" />
             )}
 
             {/* Track info */}
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 shrink-0 basis-44">
               <p className="truncate text-sm font-medium text-white">
                 {track?.trackName}
               </p>
@@ -676,7 +667,19 @@ function PlayerBar({
               </p>
             </div>
 
-            {/* Open in Spotify */}
+            {/* Spotify Embed — single instance, auto-plays via iFrame API */}
+            <div className="min-w-0 flex-1">
+              {track && (
+                <SpotifyEmbed
+                  trackId={track.trackSpotifyId}
+                  width="100%"
+                  height={80}
+                  className="block rounded"
+                />
+              )}
+            </div>
+
+            {/* Open in Spotify link */}
             {track && (
               <a
                 href={`https://open.spotify.com/track/${track.trackSpotifyId}`}
@@ -688,7 +691,54 @@ function PlayerBar({
               </a>
             )}
           </div>
-        </div>
+        ) : (
+          /* Mobile layout (<lg): [Embed full width] then [Art][Info][Link] */
+          <div className="px-3 py-2.5">
+            {/* Spotify Embed — full width, auto-plays via iFrame API */}
+            <div className="mb-2">
+              {track && (
+                <SpotifyEmbed
+                  trackId={track.trackSpotifyId}
+                  width="100%"
+                  height={80}
+                  className="block rounded"
+                />
+              )}
+            </div>
+
+            {/* Track info row */}
+            <div className="flex items-center gap-3">
+              {/* Album art */}
+              {albumArt ? (
+                <img src={albumArt} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+              ) : (
+                <span className="bg-strata-border block h-12 w-12 shrink-0 rounded" />
+              )}
+
+              {/* Track info */}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-white">
+                  {track?.trackName}
+                </p>
+                <p className="text-strata-slate-400 truncate text-xs">
+                  {track?.artistName}
+                </p>
+              </div>
+
+              {/* Open in Spotify */}
+              {track && (
+                <a
+                  href={`https://open.spotify.com/track/${track.trackSpotifyId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="border-strata-border text-strata-slate-400 hover:border-strata-amber-500/50 shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:text-white"
+                >
+                  Open in Spotify
+                </a>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
