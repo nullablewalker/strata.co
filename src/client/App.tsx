@@ -22,6 +22,7 @@ import Heatmap from "./pages/Heatmap";
 import Patterns from "./pages/Patterns";
 import BumpChart from "./pages/BumpChart";
 import EraMap from "./pages/EraMap";
+import Mosaic from "./pages/Mosaic";
 import Import from "./pages/Import";
 import Autobiography from "./pages/Autobiography";
 
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="/patterns" element={<Patterns />} />
           <Route path="/rankings" element={<BumpChart />} />
           <Route path="/era-map" element={<EraMap />} />
+          <Route path="/mosaic" element={<Mosaic />} />
           <Route path="/import" element={<Import />} />
           <Route path="/autobiography" element={<Autobiography />} />
         </Route>
