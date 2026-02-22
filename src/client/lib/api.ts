@@ -13,6 +13,8 @@
  * or set method/body via the standard RequestInit parameter.
  */
 
+import { noticeError } from "./newrelic";
+
 const API_BASE = "/api";
 
 /**
@@ -30,7 +32,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   });
 
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+    const error = new Error(`API error: ${res.status} ${res.statusText}`);
+    noticeError(error, { apiPath: path, status: String(res.status) });
+    throw error;
   }
 
   return res.json() as Promise<T>;

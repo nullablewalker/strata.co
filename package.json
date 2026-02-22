@@ -21,6 +21,7 @@
   "dependencies": {
     "@cf-wasm/og": "^0.3.7",
     "@neondatabase/serverless": "^1.0.2",
+    "@newrelic/browser-agent": "^1.310.1",
     "arctic": "^3.7.0",
     "d3": "^7.9.0",
     "drizzle-orm": "^0.45.1",

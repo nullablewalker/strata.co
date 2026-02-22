@@ -1,3 +1,6 @@
+import { initNewRelic, noticeError } from "./lib/newrelic";
+initNewRelic();
+
 /**
  * React SPA entry point for Strata.
  *
@@ -22,6 +25,7 @@ class ErrorBoundary extends Component<
   }
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[ErrorBoundary]", error, info.componentStack);
+    noticeError(error, { componentStack: info.componentStack ?? "unknown" });
   }
   render() {
     if (this.state.error) {
