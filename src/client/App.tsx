@@ -21,6 +21,7 @@ import Heatmap from "./pages/Heatmap";
 import Patterns from "./pages/Patterns";
 import BumpChart from "./pages/BumpChart";
 import Import from "./pages/Import";
+import Export from "./pages/Export";
 
 /**
  * Landing page — the only public route.
@@ -84,6 +85,7 @@ export default function App() {
           <Route path="/patterns" element={<Patterns />} />
           <Route path="/rankings" element={<BumpChart />} />
           <Route path="/import" element={<Import />} />
+          <Route path="/export" element={<Export />} />
         </Route>
       </Routes>
     </AuthProvider>

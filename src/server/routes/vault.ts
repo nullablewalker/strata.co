@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sql, eq, ilike, or, and, desc, asc, count, countDistinct } from "drizzle-orm";
+import { sql, eq, ilike, or, and, desc, asc, gte, lte, count, countDistinct } from "drizzle-orm";
 import { Spotify } from "arctic";
 import type { Session } from "hono-sessions";
 import type { Env } from "../types";
@@ -388,6 +388,111 @@ vault.get("/stats", async (c) => {
       },
       topTrack: topTrack ?? null,
       topArtist: topArtist ?? null,
+    },
+  });
+});
+
+// --- Annual Summary (Export Dossier) ---
+
+vault.get("/annual-summary", async (c) => {
+  const session = c.get("session") as Session<SessionData>;
+  const userId = session.get("userId")!;
+  const db = createDb(c.env.DATABASE_URL);
+  const year = parseInt(
+    c.req.query("year") || new Date().getFullYear().toString(),
+  );
+
+  const yearStart = new Date(`${year}-01-01T00:00:00Z`);
+  const yearEnd = new Date(`${year}-12-31T23:59:59Z`);
+  const lh = listeningHistory;
+  const condition = and(
+    eq(lh.userId, userId),
+    gte(lh.playedAt, yearStart),
+    lte(lh.playedAt, yearEnd),
+  );
+
+  // Overall stats
+  const [stats] = await db
+    .select({
+      totalPlays: sql<number>`count(*)`.mapWith(Number),
+      totalMs: sql<number>`coalesce(sum(${lh.msPlayed}), 0)`.mapWith(Number),
+      uniqueTracks: countDistinct(lh.trackSpotifyId).mapWith(Number),
+      uniqueArtists: countDistinct(lh.artistName).mapWith(Number),
+    })
+    .from(lh)
+    .where(condition);
+
+  // Top 5 artists
+  const topArtists = await db
+    .select({
+      artistName: lh.artistName,
+      playCount: sql<number>`count(*)`.mapWith(Number),
+      msPlayed: sql<number>`coalesce(sum(${lh.msPlayed}), 0)`.mapWith(Number),
+    })
+    .from(lh)
+    .where(condition)
+    .groupBy(lh.artistName)
+    .orderBy(sql`count(*) desc`)
+    .limit(5);
+
+  // Top 5 tracks
+  const topTracks = await db
+    .select({
+      trackName: lh.trackName,
+      artistName: lh.artistName,
+      playCount: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(lh)
+    .where(condition)
+    .groupBy(lh.trackName, lh.artistName)
+    .orderBy(sql`count(*) desc`)
+    .limit(5);
+
+  // Monthly play counts
+  const monthlyPlays = await db
+    .select({
+      month: sql<number>`EXTRACT(MONTH FROM ${lh.playedAt})`.mapWith(Number),
+      playCount: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(lh)
+    .where(condition)
+    .groupBy(sql`EXTRACT(MONTH FROM ${lh.playedAt})`)
+    .orderBy(sql`EXTRACT(MONTH FROM ${lh.playedAt})`);
+
+  // Peak hour
+  const peakHourRows = await db
+    .select({
+      hour: sql<number>`EXTRACT(HOUR FROM ${lh.playedAt})`.mapWith(Number),
+      playCount: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(lh)
+    .where(condition)
+    .groupBy(sql`EXTRACT(HOUR FROM ${lh.playedAt})`)
+    .orderBy(sql`count(*) desc`)
+    .limit(1);
+
+  // Available years (unfiltered by year, scoped to user)
+  const years = await db
+    .select({
+      year: sql<number>`EXTRACT(YEAR FROM ${lh.playedAt})`.mapWith(Number),
+    })
+    .from(lh)
+    .where(eq(lh.userId, userId))
+    .groupBy(sql`EXTRACT(YEAR FROM ${lh.playedAt})`)
+    .orderBy(sql`EXTRACT(YEAR FROM ${lh.playedAt}) desc`);
+
+  return c.json({
+    data: {
+      year,
+      stats,
+      topArtists,
+      topTracks,
+      monthlyPlays: Array.from({ length: 12 }, (_, i) => {
+        const found = monthlyPlays.find((m) => m.month === i + 1);
+        return { month: i + 1, playCount: found ? found.playCount : 0 };
+      }),
+      peakHour: peakHourRows[0] || null,
+      availableYears: years.map((y) => y.year),
     },
   });
 });
