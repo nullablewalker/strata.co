@@ -12,7 +12,7 @@
  * rendered inside its <Outlet />.
  */
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 
 const navItems = [
@@ -32,6 +32,7 @@ export default function Layout() {
   const { user, logout } = useAuth();
   // Controls mobile sidebar visibility; ignored on desktop via CSS (lg:static).
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
 
   return (
     <div className="flex min-h-screen">
@@ -79,7 +80,7 @@ export default function Layout() {
         <div className="flex h-14 items-center px-5">
           <NavLink
             to="/dashboard"
-            className="text-xl font-bold text-strata-amber-300"
+            className="text-xl font-bold text-strata-amber-300 transition-opacity hover:opacity-80 active:scale-[0.97]"
           >
             Strata
           </NavLink>
@@ -94,10 +95,10 @@ export default function Layout() {
               to={item.to}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
-                `block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                `flex items-center rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 ${
                   isActive
-                    ? "bg-strata-amber-500/15 text-strata-amber-300"
-                    : "text-strata-slate-400 hover:bg-strata-border/50 hover:text-white"
+                    ? "bg-strata-amber-500/15 text-strata-amber-300 shadow-[inset_3px_0_0_0] shadow-strata-amber-400"
+                    : "text-strata-slate-400 hover:bg-white/[0.04] hover:text-white active:scale-[0.98]"
                 }`
               }
             >
@@ -128,7 +129,7 @@ export default function Layout() {
             </div>
             <button
               onClick={logout}
-              className="text-xs text-strata-slate-500 transition-colors hover:text-white"
+              className="text-xs text-strata-slate-500 transition-all hover:text-white active:scale-[0.95]"
             >
               Logout
             </button>
@@ -143,7 +144,7 @@ export default function Layout() {
         <header className="flex h-14 items-center border-b border-white/[0.06] bg-strata-bg/80 backdrop-blur-xl px-4 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-strata-slate-400 hover:text-white"
+            className="text-strata-slate-400 hover:text-white transition-all active:scale-[0.9]"
           >
             <svg
               className="h-6 w-6"
@@ -165,8 +166,10 @@ export default function Layout() {
         </header>
 
         {/* Child page content is rendered here via React Router's Outlet. */}
-        <main className="mx-auto max-w-7xl flex-1 p-6 lg:p-8">
-          <Outlet />
+        <main className="flex-1 p-6 lg:p-8">
+          <div key={location.pathname} className="mx-auto max-w-7xl animate-page-enter">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
